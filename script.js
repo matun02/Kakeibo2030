@@ -148,7 +148,13 @@ async function showScreen(screenName) {
   Object.entries(screens).forEach(([name, element]) => {
     element.classList.toggle('hidden', name !== screenName);
   });
-  setActiveTab(screenName === 'analysis' ? 'analysis' : 'home');
+  const activeTabByScreen = {
+    dashboard: 'home',
+    expense: 'expense',
+    fixed: 'fixed',
+    analysis: 'analysis',
+  };
+  setActiveTab(activeTabByScreen[screenName] || 'home');
   if (screenName === 'fixed') await renderFixedCosts();
   if (screenName === 'analysis') await renderAnalysis();
   if (screenName === 'dashboard') await renderDashboard();
@@ -369,10 +375,16 @@ async function renderAnalysis() {
 
 function setActiveTab(tab) {
   const home = document.getElementById('tab-home');
+  const expense = document.getElementById('tab-expense');
+  const fixed = document.getElementById('tab-fixed');
   const analysis = document.getElementById('tab-analysis');
   home.classList.toggle('is-active', tab === 'home');
+  expense.classList.toggle('is-active', tab === 'expense');
+  fixed.classList.toggle('is-active', tab === 'fixed');
   analysis.classList.toggle('is-active', tab === 'analysis');
   home.setAttribute('aria-current', tab === 'home' ? 'page' : 'false');
+  expense.setAttribute('aria-current', tab === 'expense' ? 'page' : 'false');
+  fixed.setAttribute('aria-current', tab === 'fixed' ? 'page' : 'false');
   analysis.setAttribute('aria-current', tab === 'analysis' ? 'page' : 'false');
 }
 
@@ -487,6 +499,8 @@ function setSyncButtonLoading(isLoading, label = 'Sync with Google') {
 document.getElementById('go-expense').addEventListener('click', () => showScreen('expense'));
 document.getElementById('go-fixed').addEventListener('click', () => showScreen('fixed'));
 document.getElementById('tab-home').addEventListener('click', () => showScreen('dashboard'));
+document.getElementById('tab-expense').addEventListener('click', () => showScreen('expense'));
+document.getElementById('tab-fixed').addEventListener('click', () => showScreen('fixed'));
 document.getElementById('tab-analysis').addEventListener('click', () => showScreen('analysis'));
 document.getElementById('month-prev').addEventListener('click', () => moveMonth(-1));
 document.getElementById('month-next').addEventListener('click', () => moveMonth(1));
