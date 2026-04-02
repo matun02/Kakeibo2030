@@ -100,8 +100,14 @@
 
       <section id="screen-analysis" class="screen hidden" aria-label="分析画面">
         <div class="card">
-          <h2>分析（<span id="analysis-month-label">0000年00月</span>）</h2>
-          <p class="item-sub">固定費を除いた支出の日次推移</p>
+          <h2>分析</h2>
+          <div class="month-nav" aria-label="分析月の切り替え">
+            <button id="analysis-month-prev" class="month-arrow" aria-label="前月">◀</button>
+            <p class="month-label" id="analysis-month-label">0000年00月</p>
+            <button id="analysis-month-next" class="month-arrow" aria-label="翌月">▶</button>
+          </div>
+          <p class="item-sub">固定費を除いた支出の日次推移（0万〜10万、5万円中間線）</p>
+          <p id="analysis-variable-total" class="total-breakdown">流動費合計: ¥0</p>
           <canvas id="daily-line-chart" width="700" height="260" aria-label="日次支出推移グラフ"></canvas>
           <p id="line-empty" class="empty-text hidden">対象月の支出データがありません。</p>
         </div>
