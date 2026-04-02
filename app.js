@@ -56,6 +56,13 @@ function setExpenseDefaultDate() {
   }
 }
 
+function deleteExpense(expenseId) {
+  const expenses = loadData(STORAGE_KEYS.expenses);
+  const updated = expenses.filter((expense) => expense.id !== expenseId);
+  saveData(STORAGE_KEYS.expenses, updated);
+  renderDashboard();
+}
+
 function renderDashboard() {
   const fixedCosts = loadData(STORAGE_KEYS.fixedCosts);
   const expenses = loadData(STORAGE_KEYS.expenses);
@@ -74,16 +81,31 @@ function renderDashboard() {
   expenseList.innerHTML = '';
   const sorted = [...monthlyExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  sorted.slice(0, 12).forEach((expense) => {
+  sorted.forEach((expense) => {
     const li = document.createElement('li');
     li.className = 'list-item';
-    li.innerHTML = `
-      <div class="item-main">
-        <strong>${escapeHtml(expense.itemName)}</strong>
-        <span class="item-sub">${expense.date} / ${expense.category} / ${expense.paymentMethod}</span>
-      </div>
-      <span class="item-amount">${formatAmount(expense.amount)}</span>
+
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    main.innerHTML = `
+      <strong>${escapeHtml(expense.itemName)}</strong>
+      <span class="item-sub">${expense.date} / ${expense.category} / ${expense.paymentMethod}</span>
     `;
+
+    const right = document.createElement('div');
+    right.className = 'item-actions';
+
+    const amount = document.createElement('span');
+    amount.className = 'item-amount';
+    amount.textContent = formatAmount(expense.amount);
+
+    const del = document.createElement('button');
+    del.className = 'btn btn-danger';
+    del.textContent = '削除';
+    del.addEventListener('click', () => deleteExpense(expense.id));
+
+    right.append(amount, del);
+    li.append(main, right);
     expenseList.appendChild(li);
   });
 
@@ -106,7 +128,7 @@ function renderFixedCosts() {
     main.innerHTML = `<strong>${escapeHtml(item.itemName)}</strong><span class="item-sub">毎月固定</span>`;
 
     const right = document.createElement('div');
-    right.className = 'item-main';
+    right.className = 'item-actions';
 
     const amount = document.createElement('span');
     amount.className = 'item-amount';
@@ -156,6 +178,16 @@ function initializeRoute() {
     showScreen('fixed');
   } else {
     showScreen('expense');
+  }
+}
+
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch((error) => {
+        console.error('Service Worker registration failed:', error);
+      });
+    });
   }
 }
 
@@ -210,3 +242,4 @@ fixedForm.addEventListener('submit', (event) => {
 });
 
 initializeRoute();
+registerServiceWorker();

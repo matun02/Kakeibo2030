@@ -112,6 +112,12 @@ body {
   gap: 4px;
 }
 
+.item-actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
 .item-sub {
   color: var(--muted);
   font-size: 0.85rem;

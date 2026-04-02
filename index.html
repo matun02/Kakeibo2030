@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4f46e5" />
     <title>シンプル家計簿アプリ</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -22,7 +26,7 @@
 
         <div class="card">
           <div class="card-title-row">
-            <h2>今月の最近の支出</h2>
+            <h2>今月の出費一覧</h2>
             <span id="expense-count" class="badge">0件</span>
           </div>
           <ul id="expense-list" class="expense-list"></ul>

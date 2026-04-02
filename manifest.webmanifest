@@ -1,0 +1,18 @@
+{
+  "name": "シンプル家計簿",
+  "short_name": "家計簿",
+  "description": "固定費と毎月の出費を管理できる家計簿アプリ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#4f46e5",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
