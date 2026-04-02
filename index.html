@@ -9,8 +9,15 @@
   <body>
     <main class="app-shell">
       <header class="app-header">
-        <h1>シンプル家計簿</h1>
-        <p>固定費と日々の支出を手軽に管理</p>
+        <div>
+          <h1>シンプル家計簿</h1>
+          <p>固定費と日々の支出を手軽に管理</p>
+        </div>
+        <div class="sync-controls" aria-label="Google Drive同期">
+          <p class="sync-status">Sync Status: <span id="sync-status-text" data-state="offline">Offline</span></p>
+          <button id="google-signin" class="btn btn-primary" type="button">Sign in with Google</button>
+          <button id="google-signout" class="btn btn-light hidden" type="button">Logout</button>
+        </div>
       </header>
 
       <section id="screen-dashboard" class="screen" aria-label="メイン画面">
@@ -144,6 +151,8 @@
       </div>
     </div>
 
-    <script src="app.js"></script>
+    <script async defer src="https://apis.google.com/js/api.js"></script>
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
