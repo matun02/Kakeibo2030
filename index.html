@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>シンプル家計簿アプリ</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <h1>シンプル家計簿</h1>
+        <p>固定費と日々の支出を手軽に管理</p>
+      </header>
+
+      <section id="screen-dashboard" class="screen" aria-label="メイン画面">
+        <div class="card total-card">
+          <h2>今月の合計支出</h2>
+          <p class="total-amount" id="monthly-total">¥0</p>
+          <p class="total-breakdown" id="monthly-breakdown"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-title-row">
+            <h2>今月の最近の支出</h2>
+            <span id="expense-count" class="badge">0件</span>
+          </div>
+          <ul id="expense-list" class="expense-list"></ul>
+          <p id="expense-empty" class="empty-text">今月の支出はまだありません。</p>
+        </div>
+
+        <div class="button-row">
+          <button id="go-expense" class="btn btn-primary">支出入力へ</button>
+          <button id="go-fixed" class="btn btn-secondary">固定費入力へ</button>
+        </div>
+      </section>
+
+      <section id="screen-expense" class="screen hidden" aria-label="支出入力画面">
+        <div class="card">
+          <h2>支出入力</h2>
+          <form id="expense-form" class="form-grid">
+            <label>
+              金額
+              <input type="number" name="amount" min="1" required placeholder="例: 1200" />
+            </label>
+            <label>
+              項目名
+              <input type="text" name="itemName" required placeholder="例: 食材" />
+            </label>
+            <label>
+              日付
+              <input type="date" name="date" required />
+            </label>
+            <label>
+              カテゴリ
+              <select name="category" required>
+                <option value="内食">内食</option>
+                <option value="外食">外食</option>
+                <option value="生活用品">生活用品</option>
+                <option value="趣味">趣味</option>
+                <option value="交際費">交際費</option>
+              </select>
+            </label>
+            <label>
+              支払方法
+              <select name="paymentMethod" required>
+                <option value="現金">現金</option>
+                <option value="カード">カード</option>
+                <option value="PayPay">PayPay</option>
+                <option value="楽天ペイ">楽天ペイ</option>
+                <option value="楽天キャッシュ">楽天キャッシュ</option>
+              </select>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">保存</button>
+              <button type="button" id="expense-cancel" class="btn btn-light">閉じる</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="screen-fixed" class="screen hidden" aria-label="固定費入力画面">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>固定費入力</h2>
+            <button id="open-fixed-modal" class="btn btn-primary">新規追加</button>
+          </div>
+          <ul id="fixed-cost-list" class="fixed-cost-list"></ul>
+          <p id="fixed-empty" class="empty-text">固定費が未登録です。まず1件登録してください。</p>
+          <div class="form-actions">
+            <button id="fixed-back" class="btn btn-light">完了/戻る</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="fixed-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fixed-modal-title">
+      <div class="modal-content">
+        <h3 id="fixed-modal-title">固定費を追加</h3>
+        <form id="fixed-form" class="form-grid compact">
+          <label>
+            項目名
+            <input type="text" name="itemName" required placeholder="例: 家賃" />
+          </label>
+          <label>
+            金額
+            <input type="number" name="amount" min="1" required placeholder="例: 80000" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">追加</button>
+            <button type="button" id="fixed-modal-cancel" class="btn btn-light">キャンセル</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
