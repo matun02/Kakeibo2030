@@ -15,18 +15,23 @@
 
       <section id="screen-dashboard" class="screen" aria-label="メイン画面">
         <div class="card total-card">
-          <h2>今月の合計支出</h2>
+          <h2>選択月の合計支出</h2>
+          <div class="month-nav" aria-label="表示月の切り替え">
+            <button id="month-prev" class="month-arrow" aria-label="前月">◀</button>
+            <p class="month-label" id="selected-month-label">0000年00月</p>
+            <button id="month-next" class="month-arrow" aria-label="翌月">▶</button>
+          </div>
           <p class="total-amount" id="monthly-total">¥0</p>
           <p class="total-breakdown" id="monthly-breakdown"></p>
         </div>
 
         <div class="card">
           <div class="card-title-row">
-            <h2>今月の最近の支出</h2>
+            <h2>選択月の支出一覧</h2>
             <span id="expense-count" class="badge">0件</span>
           </div>
           <ul id="expense-list" class="expense-list"></ul>
-          <p id="expense-empty" class="empty-text">今月の支出はまだありません。</p>
+          <p id="expense-empty" class="empty-text">この月の支出はまだありません。</p>
         </div>
 
         <div class="button-row">
@@ -92,6 +97,25 @@
           </div>
         </div>
       </section>
+
+      <section id="screen-analysis" class="screen hidden" aria-label="分析画面">
+        <div class="card">
+          <h2>分析（<span id="analysis-month-label">0000年00月</span>）</h2>
+          <p class="item-sub">固定費を除いた支出の日次推移</p>
+          <canvas id="daily-line-chart" width="700" height="260" aria-label="日次支出推移グラフ"></canvas>
+          <p id="line-empty" class="empty-text hidden">対象月の支出データがありません。</p>
+        </div>
+        <div class="card">
+          <p class="item-sub">支払方法の比率</p>
+          <canvas id="payment-pie-chart" width="700" height="260" aria-label="支払方法比率グラフ"></canvas>
+          <p id="pie-empty" class="empty-text hidden">対象月の支払方法データがありません。</p>
+        </div>
+      </section>
+
+      <nav class="bottom-tabs" aria-label="画面切り替え">
+        <button id="tab-home" class="tab-btn is-active" aria-current="page">ホーム</button>
+        <button id="tab-analysis" class="tab-btn">分析</button>
+      </nav>
     </main>
 
     <div id="fixed-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fixed-modal-title">
