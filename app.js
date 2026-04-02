@@ -126,12 +126,32 @@ function renderDashboard() {
   expenseEmpty.classList.toggle('hidden', monthlyExpenses.length > 0);
 }
 
-function drawLineChart(canvas, expenses) {
+function getPastDailyAverages(allExpenses) {
+  const year = selectedMonth.getFullYear();
+  const month = selectedMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthStart = startOfMonth(selectedMonth);
+  const totals = Array.from({ length: daysInMonth }, () => 0);
+  const counts = Array.from({ length: daysInMonth }, () => 0);
+
+  allExpenses.forEach((entry) => {
+    const entryDate = new Date(entry.date);
+    if (Number.isNaN(entryDate.getTime()) || entryDate >= monthStart) return;
+    const day = entryDate.getDate();
+    if (day > daysInMonth) return;
+    totals[day - 1] += Number(entry.amount);
+    counts[day - 1] += 1;
+  });
+
+  return totals.map((total, index) => (counts[index] > 0 ? total / counts[index] : 0));
+}
+
+function drawLineChart(canvas, expenses, pastAverages) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  if (expenses.length === 0) return;
+  if (expenses.length === 0 && pastAverages.every((value) => value === 0)) return;
 
   const year = selectedMonth.getFullYear();
   const month = selectedMonth.getMonth();
@@ -141,18 +161,35 @@ function drawLineChart(canvas, expenses) {
     const day = new Date(entry.date).getDate();
     totalsByDay[day - 1] += Number(entry.amount);
   });
-  const maxValue = Math.max(...totalsByDay, 1);
 
-  const left = 36;
-  const right = width - 10;
-  const top = 14;
-  const bottom = height - 30;
+  const yMax = 100000;
+  const left = 44;
+  const right = width - 14;
+  const top = 16;
+  const bottom = height - 34;
   const xStep = (right - left) / (daysInMonth - 1 || 1);
 
+  const yForValue = (value) => bottom - ((bottom - top) * Math.min(Math.max(value, 0), yMax)) / yMax;
+
+  ctx.lineWidth = 1;
   ctx.strokeStyle = '#cbd5e1';
+  [0, 50000, 100000].forEach((value) => {
+    const y = yForValue(value);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+  });
+
+  ctx.strokeStyle = '#a5b4fc';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(left, bottom);
-  ctx.lineTo(right, bottom);
+  pastAverages.forEach((value, index) => {
+    const x = left + xStep * index;
+    const y = yForValue(value);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
   ctx.stroke();
 
   ctx.strokeStyle = '#4f46e5';
@@ -160,7 +197,7 @@ function drawLineChart(canvas, expenses) {
   ctx.beginPath();
   totalsByDay.forEach((value, index) => {
     const x = left + xStep * index;
-    const y = bottom - ((bottom - top) * value) / maxValue;
+    const y = yForValue(value);
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -168,9 +205,20 @@ function drawLineChart(canvas, expenses) {
 
   ctx.fillStyle = '#64748b';
   ctx.font = '12px sans-serif';
-  ctx.fillText('1日', left, height - 8);
-  ctx.fillText(`${daysInMonth}日`, right - 24, height - 8);
-  ctx.fillText(formatAmount(maxValue), left + 4, 14);
+  ctx.fillText('0万', 8, yForValue(0) + 4);
+  ctx.fillText('5万', 8, yForValue(50000) + 4);
+  ctx.fillText('10万', 8, yForValue(100000) + 4);
+  ctx.fillText('1日', left, height - 10);
+  ctx.fillText(`${daysInMonth}日`, right - 28, height - 10);
+
+  ctx.fillStyle = '#4f46e5';
+  ctx.fillRect(width - 220, 14, 12, 2);
+  ctx.fillStyle = '#1f2a44';
+  ctx.fillText('当月日次支出', width - 202, 18);
+  ctx.fillStyle = '#a5b4fc';
+  ctx.fillRect(width - 220, 32, 12, 2);
+  ctx.fillStyle = '#1f2a44';
+  ctx.fillText('過去同日平均', width - 202, 36);
 }
 
 function drawPieChart(canvas, expenses) {
@@ -219,14 +267,20 @@ function drawPieChart(canvas, expenses) {
 
 function renderAnalysis() {
   renderMonthLabels();
-  const expenses = loadData(STORAGE_KEYS.expenses).filter((entry) => isSelectedMonth(entry.date));
+  const allExpenses = loadData(STORAGE_KEYS.expenses);
+  const expenses = allExpenses.filter((entry) => isSelectedMonth(entry.date));
+  const variableTotal = expenses.reduce((sum, entry) => sum + Number(entry.amount), 0);
+  document.getElementById('analysis-variable-total').textContent = `流動費合計: ${formatAmount(variableTotal)}`;
+
   const lineCanvas = document.getElementById('daily-line-chart');
   const pieCanvas = document.getElementById('payment-pie-chart');
   const lineEmpty = document.getElementById('line-empty');
   const pieEmpty = document.getElementById('pie-empty');
-  drawLineChart(lineCanvas, expenses);
+  const pastAverages = getPastDailyAverages(allExpenses);
+
+  drawLineChart(lineCanvas, expenses, pastAverages);
   drawPieChart(pieCanvas, expenses);
-  lineEmpty.classList.toggle('hidden', expenses.length > 0);
+  lineEmpty.classList.toggle('hidden', expenses.length > 0 || pastAverages.some((value) => value > 0));
   pieEmpty.classList.toggle('hidden', expenses.length > 0);
 }
 
@@ -320,6 +374,8 @@ document.getElementById('tab-home').addEventListener('click', () => showScreen('
 document.getElementById('tab-analysis').addEventListener('click', () => showScreen('analysis'));
 document.getElementById('month-prev').addEventListener('click', () => moveMonth(-1));
 document.getElementById('month-next').addEventListener('click', () => moveMonth(1));
+document.getElementById('analysis-month-prev').addEventListener('click', () => moveMonth(-1));
+document.getElementById('analysis-month-next').addEventListener('click', () => moveMonth(1));
 
 document.getElementById('expense-cancel').addEventListener('click', () => showScreen('dashboard'));
 document.getElementById('fixed-back').addEventListener('click', () => showScreen('dashboard'));
