@@ -277,3 +277,38 @@ canvas {
     grid-template-columns: 1fr;
   }
 }
+
+.sync-controls {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.sync-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+#sync-status-text[data-state='synced'] {
+  color: #047857;
+}
+
+#sync-status-text[data-state='syncing'] {
+  color: #1d4ed8;
+}
+
+#sync-status-text[data-state='error'] {
+  color: #b91c1c;
+}
+
+@media (max-width: 620px) {
+  .app-header {
+    display: grid;
+    gap: 10px;
+  }
+
+  .sync-controls {
+    justify-items: start;
+  }
+}

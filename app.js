@@ -1,7 +1,16 @@
+import GoogleDriveService from './GoogleDriveService.js';
+
+const GOOGLE_CONFIG = {
+  CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+  API_KEY: 'YOUR_GOOGLE_API_KEY',
+};
+
 const STORAGE_KEYS = {
   fixedCosts: 'kakeibo_fixed_costs',
   expenses: 'kakeibo_expenses',
 };
+
+const DRIVE_FILE_NAME = 'kakeibo_data.json';
 
 const screens = {
   dashboard: document.getElementById('screen-dashboard'),
@@ -13,11 +22,21 @@ const screens = {
 const expenseForm = document.getElementById('expense-form');
 const fixedForm = document.getElementById('fixed-form');
 const fixedModal = document.getElementById('fixed-modal');
+const googleSignInButton = document.getElementById('google-signin');
+const googleSignOutButton = document.getElementById('google-signout');
+const syncStatusLabel = document.getElementById('sync-status-text');
 
 const formatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 let selectedMonth = startOfMonth(new Date());
 
-function loadData(key) {
+const driveService = new GoogleDriveService({
+  clientId: GOOGLE_CONFIG.CLIENT_ID,
+  apiKey: GOOGLE_CONFIG.API_KEY,
+  fileName: DRIVE_FILE_NAME,
+  onStatusChange: (status) => updateSyncStatus(status),
+});
+
+async function loadData(key) {
   try {
     return JSON.parse(localStorage.getItem(key) || '[]');
   } catch {
@@ -25,8 +44,44 @@ function loadData(key) {
   }
 }
 
-function saveData(key, data) {
+async function saveData(key, data, options = {}) {
   localStorage.setItem(key, JSON.stringify(data));
+
+  if (options.skipCloudSync) return;
+
+  const snapshot = await getLocalSnapshot();
+  driveService.queueSync(snapshot);
+}
+
+async function getLocalSnapshot() {
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    fixedCosts: await loadData(STORAGE_KEYS.fixedCosts),
+    expenses: await loadData(STORAGE_KEYS.expenses),
+  };
+}
+
+async function applySnapshotToLocal(snapshot) {
+  await saveData(STORAGE_KEYS.fixedCosts, Array.isArray(snapshot.fixedCosts) ? snapshot.fixedCosts : [], { skipCloudSync: true });
+  await saveData(STORAGE_KEYS.expenses, Array.isArray(snapshot.expenses) ? snapshot.expenses : [], { skipCloudSync: true });
+}
+
+function updateAuthButtons() {
+  const signedIn = driveService.isSignedIn();
+  googleSignInButton.classList.toggle('hidden', signedIn);
+  googleSignOutButton.classList.toggle('hidden', !signedIn);
+}
+
+function updateSyncStatus(status) {
+  const statusMap = {
+    offline: 'Offline',
+    syncing: 'Syncing...',
+    synced: 'Synced',
+    error: 'Sync error',
+  };
+  syncStatusLabel.textContent = statusMap[status] || 'Offline';
+  syncStatusLabel.dataset.state = status;
 }
 
 function formatAmount(value) {
@@ -50,9 +105,9 @@ function monthLabel(date) {
   return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`;
 }
 
-function moveMonth(offset) {
+async function moveMonth(offset) {
   selectedMonth = startOfMonth(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + offset, 1));
-  renderAll();
+  await renderAll();
 }
 
 function renderMonthLabels() {
@@ -61,14 +116,14 @@ function renderMonthLabels() {
   document.getElementById('analysis-month-label').textContent = label;
 }
 
-function showScreen(screenName) {
+async function showScreen(screenName) {
   Object.entries(screens).forEach(([name, element]) => {
     element.classList.toggle('hidden', name !== screenName);
   });
   setActiveTab(screenName === 'analysis' ? 'analysis' : 'home');
-  if (screenName === 'fixed') renderFixedCosts();
-  if (screenName === 'analysis') renderAnalysis();
-  if (screenName === 'dashboard') renderDashboard();
+  if (screenName === 'fixed') await renderFixedCosts();
+  if (screenName === 'analysis') await renderAnalysis();
+  if (screenName === 'dashboard') await renderDashboard();
   if (screenName === 'expense') setExpenseDefaultDate();
 }
 
@@ -78,10 +133,10 @@ function setExpenseDefaultDate() {
   }
 }
 
-function renderDashboard() {
+async function renderDashboard() {
   renderMonthLabels();
-  const fixedCosts = loadData(STORAGE_KEYS.fixedCosts);
-  const expenses = loadData(STORAGE_KEYS.expenses);
+  const fixedCosts = await loadData(STORAGE_KEYS.fixedCosts);
+  const expenses = await loadData(STORAGE_KEYS.expenses);
   const monthlyExpenses = expenses.filter((entry) => isSelectedMonth(entry.date));
 
   const fixedTotal = fixedCosts.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -114,11 +169,11 @@ function renderDashboard() {
   });
 
   expenseList.querySelectorAll('.expense-delete').forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const expenseId = button.dataset.expenseId;
-      const updated = loadData(STORAGE_KEYS.expenses).filter((expense) => expense.id !== expenseId);
-      saveData(STORAGE_KEYS.expenses, updated);
-      renderAll();
+      const updated = (await loadData(STORAGE_KEYS.expenses)).filter((expense) => expense.id !== expenseId);
+      await saveData(STORAGE_KEYS.expenses, updated);
+      await renderAll();
     });
   });
 
@@ -265,9 +320,9 @@ function drawPieChart(canvas, expenses) {
   });
 }
 
-function renderAnalysis() {
+async function renderAnalysis() {
   renderMonthLabels();
-  const allExpenses = loadData(STORAGE_KEYS.expenses);
+  const allExpenses = await loadData(STORAGE_KEYS.expenses);
   const expenses = allExpenses.filter((entry) => isSelectedMonth(entry.date));
   const variableTotal = expenses.reduce((sum, entry) => sum + Number(entry.amount), 0);
   document.getElementById('analysis-variable-total').textContent = `流動費合計: ${formatAmount(variableTotal)}`;
@@ -293,15 +348,15 @@ function setActiveTab(tab) {
   analysis.setAttribute('aria-current', tab === 'analysis' ? 'page' : 'false');
 }
 
-function renderAll() {
+async function renderAll() {
   renderMonthLabels();
-  if (!screens.dashboard.classList.contains('hidden')) renderDashboard();
-  if (!screens.analysis.classList.contains('hidden')) renderAnalysis();
-  if (!screens.fixed.classList.contains('hidden')) renderFixedCosts();
+  if (!screens.dashboard.classList.contains('hidden')) await renderDashboard();
+  if (!screens.analysis.classList.contains('hidden')) await renderAnalysis();
+  if (!screens.fixed.classList.contains('hidden')) await renderFixedCosts();
 }
 
-function renderFixedCosts() {
-  const fixedCosts = loadData(STORAGE_KEYS.fixedCosts);
+async function renderFixedCosts() {
+  const fixedCosts = await loadData(STORAGE_KEYS.fixedCosts);
   const list = document.getElementById('fixed-cost-list');
   const empty = document.getElementById('fixed-empty');
   list.innerHTML = '';
@@ -324,10 +379,11 @@ function renderFixedCosts() {
     const del = document.createElement('button');
     del.className = 'btn btn-danger';
     del.textContent = '削除';
-    del.addEventListener('click', () => {
-      const updated = loadData(STORAGE_KEYS.fixedCosts).filter((cost) => cost.id !== item.id);
-      saveData(STORAGE_KEYS.fixedCosts, updated);
-      renderFixedCosts();
+    del.addEventListener('click', async () => {
+      const updated = (await loadData(STORAGE_KEYS.fixedCosts)).filter((cost) => cost.id !== item.id);
+      await saveData(STORAGE_KEYS.fixedCosts, updated);
+      await renderFixedCosts();
+      await renderDashboard();
     });
 
     right.append(amount, del);
@@ -359,13 +415,35 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (match) => map[match]);
 }
 
-function initializeRoute() {
-  const fixedCosts = loadData(STORAGE_KEYS.fixedCosts);
+async function initializeRoute() {
+  const fixedCosts = await loadData(STORAGE_KEYS.fixedCosts);
   if (fixedCosts.length === 0) {
-    showScreen('fixed');
+    await showScreen('fixed');
   } else {
-    showScreen('dashboard');
+    await showScreen('dashboard');
   }
+}
+
+async function handleGoogleSignIn() {
+  try {
+    await driveService.signIn();
+    updateAuthButtons();
+    const localSnapshot = await getLocalSnapshot();
+    const initialSyncResult = await driveService.performInitialSync(localSnapshot);
+
+    if (initialSyncResult.source === 'cloud') {
+      await applySnapshotToLocal(initialSyncResult.snapshot);
+      await renderAll();
+    }
+  } catch (error) {
+    updateSyncStatus('error');
+    console.error(error);
+  }
+}
+
+function handleGoogleSignOut() {
+  driveService.signOut();
+  updateAuthButtons();
 }
 
 document.getElementById('go-expense').addEventListener('click', () => showScreen('expense'));
@@ -381,12 +459,14 @@ document.getElementById('expense-cancel').addEventListener('click', () => showSc
 document.getElementById('fixed-back').addEventListener('click', () => showScreen('dashboard'));
 document.getElementById('open-fixed-modal').addEventListener('click', openFixedModal);
 document.getElementById('fixed-modal-cancel').addEventListener('click', closeFixedModal);
+googleSignInButton.addEventListener('click', handleGoogleSignIn);
+googleSignOutButton.addEventListener('click', handleGoogleSignOut);
 
 fixedModal.addEventListener('click', (event) => {
   if (event.target === fixedModal) closeFixedModal();
 });
 
-expenseForm.addEventListener('submit', (event) => {
+expenseForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const payload = {
@@ -398,17 +478,17 @@ expenseForm.addEventListener('submit', (event) => {
     paymentMethod: expenseForm.paymentMethod.value,
   };
 
-  const expenses = loadData(STORAGE_KEYS.expenses);
+  const expenses = await loadData(STORAGE_KEYS.expenses);
   expenses.push(payload);
-  saveData(STORAGE_KEYS.expenses, expenses);
+  await saveData(STORAGE_KEYS.expenses, expenses);
 
   expenseForm.reset();
   setExpenseDefaultDate();
-  renderAll();
-  showScreen('dashboard');
+  await renderAll();
+  await showScreen('dashboard');
 });
 
-fixedForm.addEventListener('submit', (event) => {
+fixedForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const newFixedCost = {
@@ -417,12 +497,16 @@ fixedForm.addEventListener('submit', (event) => {
     amount: Number(fixedForm.amount.value),
   };
 
-  const fixedCosts = loadData(STORAGE_KEYS.fixedCosts);
+  const fixedCosts = await loadData(STORAGE_KEYS.fixedCosts);
   fixedCosts.push(newFixedCost);
-  saveData(STORAGE_KEYS.fixedCosts, fixedCosts);
+  await saveData(STORAGE_KEYS.fixedCosts, fixedCosts);
 
   closeFixedModal();
-  renderAll();
+  await renderAll();
 });
 
-initializeRoute();
+(async function bootstrap() {
+  updateAuthButtons();
+  updateSyncStatus('offline');
+  await initializeRoute();
+})();

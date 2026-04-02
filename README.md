@@ -6,7 +6,7 @@
 ## 1. アプリ概要
 
 - **実行環境**: モダンブラウザ（HTML/CSS/Vanilla JavaScript）
-- **データ保存先**: `localStorage`
+- **データ保存先**: `localStorage` + Google Drive `appDataFolder`（任意同期）
 - **画面構成**:
   - ホーム（ダッシュボード）
   - 支出入力
@@ -25,8 +25,12 @@
 - `index.html`: 画面骨格（各セクション、フォーム、モーダル、タブ）
 - `styles.css`: レイアウト・配色・レスポンシブスタイル
 - `app.js`: 状態管理、永続化、描画、イベント制御
+- `GoogleDriveService.js`: Google Identity Services + Drive API v3 による同期処理
 
-外部ライブラリは利用せず、Canvas API でグラフを描画します。
+Canvas API でグラフを描画し、Google同期時のみ以下を読み込みます。
+
+- Google API Client (`https://apis.google.com/js/api.js`)
+- Google Identity Services (`https://accounts.google.com/gsi/client`)
 
 ---
 
@@ -169,3 +173,32 @@
 - データエクスポート/インポート（JSON/CSV）
 - クラウド同期対応（認証基盤追加）
 
+
+
+---
+
+## 9. Google Drive同期の設定
+
+### 9.1 設定値（公開リポジトリ対応）
+
+`app.js` の `GOOGLE_CONFIG` にプレースホルダーがあります。
+
+- `CLIENT_ID`: OAuth 2.0 Client ID
+- `API_KEY`: Browser API key
+
+### 9.2 OAuth同意画面/認証設定
+
+静的サイト（例: GitHub Pages）で利用する場合、Google Cloud Consoleで以下を許可してください。
+
+- JavaScript origins: `https://<username>.github.io`
+- （必要なら）localhost開発用 origin: `http://localhost:<port>`
+
+本アプリはGISのトークンフローを使い、`drive.appdata` スコープで `appDataFolder` の `kakeibo_data.json` を読み書きします。
+
+### 9.3 同期仕様
+
+- ログイン直後に `appDataFolder` を確認
+  - `kakeibo_data.json` が存在する場合: クラウドデータでローカルを上書き
+  - 存在しない場合: ローカルデータを初期アップロード
+- 支出/固定費の追加・削除ごとにローカル保存後、バックグラウンド同期
+- ヘッダに同期状態（Offline / Syncing... / Synced / Sync error）を表示
