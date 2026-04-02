@@ -312,3 +312,13 @@ canvas {
     justify-items: start;
   }
 }
+
+#sync-status-text[data-state='connected'],
+#sync-status-text[data-state='idle'] {
+  color: #0f766e;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

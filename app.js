@@ -1,8 +1,10 @@
 import GoogleDriveService from './GoogleDriveService.js';
 
 const GOOGLE_CONFIG = {
-  CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-  API_KEY: 'YOUR_GOOGLE_API_KEY',
+  CLIENT_ID: '1083922017545-gmt6evnv6kn3bfv7m3f7hu7oufeij2b8.apps.googleusercontent.com',
+  API_KEY: 'AIzaSyDPHBKFYqm_P7CmStYNVlbYbzfwFTNbjds',
+  SCOPE: 'https://www.googleapis.com/auth/drive.appdata',
+  DISCOVERY_DOCS: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
 };
 
 const STORAGE_KEYS = {
@@ -32,6 +34,8 @@ let selectedMonth = startOfMonth(new Date());
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
   apiKey: GOOGLE_CONFIG.API_KEY,
+  scope: GOOGLE_CONFIG.SCOPE,
+  discoveryDocs: GOOGLE_CONFIG.DISCOVERY_DOCS,
   fileName: DRIVE_FILE_NAME,
   onStatusChange: (status) => updateSyncStatus(status),
 });
@@ -75,10 +79,13 @@ function updateAuthButtons() {
 
 function updateSyncStatus(status) {
   const statusMap = {
+    idle: 'Ready',
     offline: 'Offline',
+    connecting: 'Connecting...',
+    connected: 'Connected',
     syncing: 'Syncing...',
     synced: 'Synced',
-    error: 'Sync error',
+    error: 'Error',
   };
   syncStatusLabel.textContent = statusMap[status] || 'Offline';
   syncStatusLabel.dataset.state = status;
@@ -425,6 +432,8 @@ async function initializeRoute() {
 }
 
 async function handleGoogleSignIn() {
+  if (googleSignInButton.disabled) return;
+
   try {
     await driveService.signIn();
     updateAuthButtons();
@@ -437,6 +446,7 @@ async function handleGoogleSignIn() {
     }
   } catch (error) {
     updateSyncStatus('error');
+    alert(`Google Drive同期に失敗しました: ${error.message || error}`);
     console.error(error);
   }
 }
@@ -444,6 +454,11 @@ async function handleGoogleSignIn() {
 function handleGoogleSignOut() {
   driveService.signOut();
   updateAuthButtons();
+}
+
+function setSyncButtonLoading(isLoading, label = 'Sync with Google') {
+  googleSignInButton.disabled = isLoading;
+  googleSignInButton.textContent = label;
 }
 
 document.getElementById('go-expense').addEventListener('click', () => showScreen('expense'));
@@ -506,7 +521,19 @@ fixedForm.addEventListener('submit', async (event) => {
 });
 
 (async function bootstrap() {
+  setSyncButtonLoading(true, 'Loading Google...');
   updateAuthButtons();
   updateSyncStatus('offline');
+
+  try {
+    await driveService.initialize();
+    setSyncButtonLoading(false, 'Sync with Google');
+    updateSyncStatus('idle');
+  } catch (error) {
+    updateSyncStatus('error');
+    setSyncButtonLoading(true, 'Google unavailable');
+    console.error(error);
+  }
+
   await initializeRoute();
 })();

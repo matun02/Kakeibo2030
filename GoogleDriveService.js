@@ -1,10 +1,9 @@
-const DRIVE_DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-
 export default class GoogleDriveService {
-  constructor({ clientId, apiKey, fileName, onStatusChange }) {
+  constructor({ clientId, apiKey, scope, discoveryDocs, fileName, onStatusChange }) {
     this.clientId = clientId;
     this.apiKey = apiKey;
+    this.scope = scope;
+    this.discoveryDocs = discoveryDocs;
     this.fileName = fileName;
     this.onStatusChange = onStatusChange || (() => {});
 
@@ -15,11 +14,19 @@ export default class GoogleDriveService {
 
     this.pendingSnapshot = null;
     this.syncTimer = null;
+    this.initializePromise = null;
   }
 
   async initialize() {
-    await Promise.all([this.#initializeGapi(), this.#initializeGis()]);
-    this.#updateStatus('offline');
+    if (this.initializePromise) return this.initializePromise;
+
+    this.initializePromise = (async () => {
+      await this.#waitForGoogleScripts();
+      await Promise.all([this.#initializeGapi(), this.#initializeGis()]);
+      this.#updateStatus('offline');
+    })();
+
+    return this.initializePromise;
   }
 
   isSignedIn() {
@@ -28,7 +35,7 @@ export default class GoogleDriveService {
 
   async signIn() {
     await this.initialize();
-    this.#updateStatus('syncing');
+    this.#updateStatus('connecting');
 
     const tokenResponse = await new Promise((resolve, reject) => {
       this.tokenClient.callback = (response) => {
@@ -42,7 +49,7 @@ export default class GoogleDriveService {
     });
 
     this.accessToken = tokenResponse.access_token;
-    this.#updateStatus('synced');
+    this.#updateStatus('connected');
     return tokenResponse;
   }
 
@@ -51,10 +58,12 @@ export default class GoogleDriveService {
     window.google.accounts.oauth2.revoke(this.accessToken);
     this.accessToken = null;
     this.pendingSnapshot = null;
+
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
       this.syncTimer = null;
     }
+
     this.#updateStatus('offline');
   }
 
@@ -104,6 +113,17 @@ export default class GoogleDriveService {
     this.#updateStatus('synced');
   }
 
+  async #waitForGoogleScripts(timeoutMs = 12000) {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      if (window.gapi?.load && window.google?.accounts?.oauth2) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    throw new Error('Google API scripts failed to load in time.');
+  }
+
   async #initializeGapi() {
     if (this.gapiInited) return;
 
@@ -112,11 +132,12 @@ export default class GoogleDriveService {
         reject(new Error('GAPI script is not available.'));
         return;
       }
+
       window.gapi.load('client', async () => {
         try {
           await window.gapi.client.init({
             apiKey: this.apiKey,
-            discoveryDocs: [DRIVE_DISCOVERY_DOC],
+            discoveryDocs: this.discoveryDocs,
           });
           this.gapiInited = true;
           resolve();
@@ -136,7 +157,7 @@ export default class GoogleDriveService {
 
     this.tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: this.clientId,
-      scope: DRIVE_SCOPE,
+      scope: this.scope,
       callback: () => {},
     });
 
