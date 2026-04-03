@@ -29,9 +29,11 @@ const fixedModal = document.getElementById('fixed-modal');
 const googleSignInButton = document.getElementById('google-signin');
 const googleSignOutButton = document.getElementById('google-signout');
 const syncStatusLabel = document.getElementById('sync-status-text');
+const fixedSubmitButton = fixedForm.querySelector('button[type="submit"]');
 
 const formatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 let selectedMonth = startOfMonth(new Date());
+let isSubmittingFixedCost = false;
 
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
@@ -669,19 +671,27 @@ expenseForm.addEventListener('submit', async (event) => {
 
 fixedForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (isSubmittingFixedCost) return;
+  isSubmittingFixedCost = true;
+  fixedSubmitButton.disabled = true;
 
-  const newFixedCost = {
-    id: crypto.randomUUID(),
-    itemName: fixedForm.itemName.value.trim(),
-    amount: Number(fixedForm.amount.value),
-  };
+  try {
+    const newFixedCost = {
+      id: crypto.randomUUID(),
+      itemName: fixedForm.itemName.value.trim(),
+      amount: Number(fixedForm.amount.value),
+    };
 
-  const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
-  fixedCosts.push(newFixedCost);
-  await saveLocalData(STORAGE_KEYS.fixedCosts, fixedCosts);
+    const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+    fixedCosts.push(newFixedCost);
+    await saveLocalData(STORAGE_KEYS.fixedCosts, fixedCosts);
 
-  closeFixedModal();
-  await renderAll();
+    closeFixedModal();
+    await renderAll();
+  } finally {
+    isSubmittingFixedCost = false;
+    fixedSubmitButton.disabled = false;
+  }
 });
 
 (async function bootstrap() {
