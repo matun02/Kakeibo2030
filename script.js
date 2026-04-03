@@ -273,22 +273,14 @@ async function markMonthFixedCostConfigured(targetDate) {
   await saveFixedMonthStatusMap(statusMap);
 }
 
-async function findLatestFixedCostsBeforeMonth(targetMonthKey) {
+async function getPreviousMonthConfiguredFixedCosts(targetDate) {
+  const previousMonth = startOfMonth(new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, 1));
+  const isPreviousMonthConfigured = await isMonthFixedCostConfigured(previousMonth);
+  if (!isPreviousMonthConfigured) return [];
+
+  const previousMonthKey = monthKeyFromDate(previousMonth);
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
-  const targetDate = monthDateFromKey(targetMonthKey);
-  if (!targetDate) return [];
-  const grouped = new Map();
-  fixedCosts.forEach((item) => {
-    if (!item.monthKey) return;
-    if (!grouped.has(item.monthKey)) grouped.set(item.monthKey, []);
-    grouped.get(item.monthKey).push(item);
-  });
-  const latestKey = [...grouped.keys()]
-    .map((key) => ({ key, date: monthDateFromKey(key) }))
-    .filter((entry) => entry.date && entry.date < targetDate)
-    .sort((a, b) => b.date - a.date)[0]?.key;
-  if (!latestKey) return [];
-  return grouped.get(latestKey) || [];
+  return fixedCosts.filter((item) => item.monthKey === previousMonthKey);
 }
 
 async function ensureMonthFixedCostsDefault(targetDate) {
@@ -296,7 +288,7 @@ async function ensureMonthFixedCostsDefault(targetDate) {
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
   const existing = fixedCosts.filter((item) => item.monthKey === monthKey);
   if (existing.length > 0) return;
-  const defaults = await findLatestFixedCostsBeforeMonth(monthKey);
+  const defaults = await getPreviousMonthConfiguredFixedCosts(targetDate);
   if (defaults.length === 0) return;
   const copied = defaults.map((item) => ({
     id: crypto.randomUUID(),
@@ -773,6 +765,9 @@ async function normalizeFixedCostsSchema() {
 }
 
 async function copyMonthFixedCosts(sourceDate, targetDate, { markConfigured = false } = {}) {
+  const sourceConfigured = await isMonthFixedCostConfigured(sourceDate);
+  if (!sourceConfigured) return;
+
   const sourceKey = monthKeyFromDate(sourceDate);
   const targetKey = monthKeyFromDate(targetDate);
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
