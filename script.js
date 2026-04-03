@@ -34,6 +34,7 @@ const fixedSubmitButton = fixedForm.querySelector('button[type="submit"]');
 const formatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 let selectedMonth = startOfMonth(new Date());
 let isSubmittingFixedCost = false;
+let editingExpenseId = null;
 
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
@@ -180,6 +181,10 @@ function setExpenseDefaultDate() {
   }
 }
 
+function resetExpenseEditor() {
+  editingExpenseId = null;
+}
+
 async function renderDashboard() {
   renderMonthLabels();
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
@@ -202,6 +207,8 @@ async function renderDashboard() {
   sorted.slice(0, 12).forEach((expense) => {
     const li = document.createElement('li');
     li.className = 'list-item';
+    li.setAttribute('role', 'button');
+    li.setAttribute('tabindex', '0');
     li.innerHTML = `
       <div class="item-main">
         <strong>${escapeHtml(expense.itemName)}</strong>
@@ -212,11 +219,29 @@ async function renderDashboard() {
         <button class="btn btn-danger expense-delete" data-expense-id="${expense.id}">削除</button>
       </div>
     `;
+    li.addEventListener('click', async () => {
+      const targetExpense = (await loadLocalData(STORAGE_KEYS.expenses)).find((entry) => entry.id === expense.id);
+      if (!targetExpense) return;
+      await showScreen('expense');
+      editingExpenseId = targetExpense.id;
+      expenseForm.amount.value = targetExpense.amount;
+      expenseForm.itemName.value = targetExpense.itemName;
+      expenseForm.date.value = targetExpense.date;
+      expenseForm.category.value = targetExpense.category;
+      expenseForm.paymentMethod.value = targetExpense.paymentMethod;
+    });
+    li.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        li.click();
+      }
+    });
     expenseList.appendChild(li);
   });
 
   expenseList.querySelectorAll('.expense-delete').forEach((button) => {
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
       const expenseId = button.dataset.expenseId;
       const updated = (await loadLocalData(STORAGE_KEYS.expenses)).filter((expense) => expense.id !== expenseId);
       await saveLocalData(STORAGE_KEYS.expenses, updated);
@@ -609,10 +634,20 @@ function setSyncButtonLoading(isLoading, label = 'Sync with Google') {
   googleSignInButton.textContent = label;
 }
 
-document.getElementById('go-expense').addEventListener('click', () => showScreen('expense'));
+document.getElementById('go-expense').addEventListener('click', async () => {
+  resetExpenseEditor();
+  expenseForm.reset();
+  setExpenseDefaultDate();
+  await showScreen('expense');
+});
 document.getElementById('go-fixed').addEventListener('click', () => showScreen('fixed'));
 document.getElementById('tab-home').addEventListener('click', () => showScreen('dashboard'));
-document.getElementById('tab-expense').addEventListener('click', () => showScreen('expense'));
+document.getElementById('tab-expense').addEventListener('click', async () => {
+  resetExpenseEditor();
+  expenseForm.reset();
+  setExpenseDefaultDate();
+  await showScreen('expense');
+});
 document.getElementById('tab-fixed').addEventListener('click', () => showScreen('fixed'));
 document.getElementById('tab-analysis').addEventListener('click', () => showScreen('analysis'));
 document.getElementById('month-prev').addEventListener('click', () => moveMonth(-1));
@@ -620,7 +655,12 @@ document.getElementById('month-next').addEventListener('click', () => moveMonth(
 document.getElementById('analysis-month-prev').addEventListener('click', () => moveMonth(-1));
 document.getElementById('analysis-month-next').addEventListener('click', () => moveMonth(1));
 
-document.getElementById('expense-cancel').addEventListener('click', () => showScreen('dashboard'));
+document.getElementById('expense-cancel').addEventListener('click', async () => {
+  resetExpenseEditor();
+  expenseForm.reset();
+  setExpenseDefaultDate();
+  await showScreen('dashboard');
+});
 document.getElementById('fixed-back').addEventListener('click', () => showScreen('dashboard'));
 document.getElementById('open-fixed-modal').addEventListener('click', openFixedModal);
 document.getElementById('fixed-modal-cancel').addEventListener('click', closeFixedModal);
@@ -660,9 +700,16 @@ expenseForm.addEventListener('submit', async (event) => {
   };
 
   const expenses = await loadLocalData(STORAGE_KEYS.expenses);
-  expenses.push(payload);
-  await saveLocalData(STORAGE_KEYS.expenses, expenses);
+  if (editingExpenseId) {
+    const filtered = expenses.filter((entry) => entry.id !== editingExpenseId);
+    filtered.push(payload);
+    await saveLocalData(STORAGE_KEYS.expenses, filtered);
+  } else {
+    expenses.push(payload);
+    await saveLocalData(STORAGE_KEYS.expenses, expenses);
+  }
 
+  resetExpenseEditor();
   expenseForm.reset();
   setExpenseDefaultDate();
   await renderAll();

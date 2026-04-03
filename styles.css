@@ -129,6 +129,15 @@ body {
   margin-bottom: 8px;
 }
 
+.expense-list .list-item {
+  cursor: pointer;
+}
+
+.expense-list .list-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .item-main {
   display: grid;
   gap: 4px;
