@@ -42,6 +42,10 @@ body {
   font-size: 1.5rem;
 }
 
+.app-brand {
+  min-width: 0;
+}
+
 .app-header p {
   margin: 6px 0 0;
   color: var(--muted);
@@ -302,6 +306,7 @@ canvas {
   display: grid;
   gap: 8px;
   justify-items: end;
+  text-align: right;
 }
 
 .sync-status {
@@ -324,12 +329,29 @@ canvas {
 
 @media (max-width: 620px) {
   .app-header {
-    display: grid;
-    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .app-header p {
+    margin-top: 4px;
+    font-size: 0.85rem;
+  }
+
+  .sync-status {
+    font-size: 0.8rem;
   }
 
   .sync-controls {
-    justify-items: start;
+    gap: 6px;
+  }
+
+  .sync-controls .btn {
+    padding: 9px 10px;
+    font-size: 0.85rem;
   }
 }
 
