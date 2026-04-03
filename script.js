@@ -8,9 +8,13 @@ const GOOGLE_CONFIG = {
 const STORAGE_KEYS = {
   fixedCosts: 'kakeibo_fixed_costs',
   expenses: 'kakeibo_expenses',
+  categories: 'kakeibo_categories',
+  paymentMethods: 'kakeibo_payment_methods',
 };
 
 const DRIVE_FILE_NAME = 'kakeibo_data.json';
+const DEFAULT_CATEGORIES = ['内食', '外食', '生活用品', '趣味', '交際費'];
+const DEFAULT_PAYMENT_METHODS = ['現金', 'カード', 'PayPay', '楽天ペイ', '楽天キャッシュ'];
 
 const screens = {
   dashboard: document.getElementById('screen-dashboard'),
@@ -58,12 +62,16 @@ async function getLocalSnapshot() {
     updatedAt: new Date().toISOString(),
     fixedCosts: await loadLocalData(STORAGE_KEYS.fixedCosts),
     expenses: await loadLocalData(STORAGE_KEYS.expenses),
+    categories: await loadLocalData(STORAGE_KEYS.categories),
+    paymentMethods: await loadLocalData(STORAGE_KEYS.paymentMethods),
   };
 }
 
 async function applySnapshotToLocal(snapshot) {
   await saveLocalData(STORAGE_KEYS.fixedCosts, Array.isArray(snapshot.fixedCosts) ? snapshot.fixedCosts : [], { skipCloudSync: true });
   await saveLocalData(STORAGE_KEYS.expenses, Array.isArray(snapshot.expenses) ? snapshot.expenses : [], { skipCloudSync: true });
+  await saveLocalData(STORAGE_KEYS.categories, Array.isArray(snapshot.categories) ? snapshot.categories : [], { skipCloudSync: true });
+  await saveLocalData(STORAGE_KEYS.paymentMethods, Array.isArray(snapshot.paymentMethods) ? snapshot.paymentMethods : [], { skipCloudSync: true });
 }
 
 
@@ -158,7 +166,10 @@ async function showScreen(screenName) {
   if (screenName === 'fixed') await renderFixedCosts();
   if (screenName === 'analysis') await renderAnalysis();
   if (screenName === 'dashboard') await renderDashboard();
-  if (screenName === 'expense') setExpenseDefaultDate();
+  if (screenName === 'expense') {
+    await renderExpenseOptions();
+    setExpenseDefaultDate();
+  }
 }
 
 function setExpenseDefaultDate() {
@@ -390,9 +401,83 @@ function setActiveTab(tab) {
 
 async function renderAll() {
   renderMonthLabels();
+  await renderExpenseOptions();
   if (!screens.dashboard.classList.contains('hidden')) await renderDashboard();
   if (!screens.analysis.classList.contains('hidden')) await renderAnalysis();
   if (!screens.fixed.classList.contains('hidden')) await renderFixedCosts();
+}
+
+async function getManagedOptions(storageKey, defaults) {
+  const saved = await loadLocalData(storageKey);
+  const base = Array.isArray(saved) ? saved : [];
+  const merged = [...defaults, ...base]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return [...new Set(merged)];
+}
+
+function sortOptionsByUsage(options, usageMap) {
+  return [...options].sort((a, b) => (usageMap.get(b) || 0) - (usageMap.get(a) || 0));
+}
+
+async function renderExpenseOptions() {
+  const [expenses, categories, paymentMethods] = await Promise.all([
+    loadLocalData(STORAGE_KEYS.expenses),
+    getManagedOptions(STORAGE_KEYS.categories, DEFAULT_CATEGORIES),
+    getManagedOptions(STORAGE_KEYS.paymentMethods, DEFAULT_PAYMENT_METHODS),
+  ]);
+
+  const categoryUsage = new Map();
+  const paymentUsage = new Map();
+  expenses.forEach((expense) => {
+    categoryUsage.set(expense.category, (categoryUsage.get(expense.category) || 0) + 1);
+    paymentUsage.set(expense.paymentMethod, (paymentUsage.get(expense.paymentMethod) || 0) + 1);
+  });
+
+  const categorySelect = expenseForm.category;
+  const paymentSelect = expenseForm.paymentMethod;
+  const selectedCategory = categorySelect.value;
+  const selectedPayment = paymentSelect.value;
+
+  categorySelect.innerHTML = '';
+  sortOptionsByUsage(categories, categoryUsage).forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    categorySelect.appendChild(option);
+  });
+
+  paymentSelect.innerHTML = '';
+  sortOptionsByUsage(paymentMethods, paymentUsage).forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    paymentSelect.appendChild(option);
+  });
+
+  if (selectedCategory && Array.from(categorySelect.options).some((option) => option.value === selectedCategory)) {
+    categorySelect.value = selectedCategory;
+  }
+  if (selectedPayment && Array.from(paymentSelect.options).some((option) => option.value === selectedPayment)) {
+    paymentSelect.value = selectedPayment;
+  }
+}
+
+async function addManagedOption({ storageKey, defaults, inputId, selectName }) {
+  const input = document.getElementById(inputId);
+  const value = input.value.trim();
+  if (!value) return;
+
+  const options = await getManagedOptions(storageKey, defaults);
+  if (!options.includes(value)) {
+    const onlyCustom = options.filter((item) => !defaults.includes(item));
+    onlyCustom.push(value);
+    await saveLocalData(storageKey, onlyCustom);
+  }
+
+  input.value = '';
+  await renderExpenseOptions();
+  expenseForm[selectName].value = value;
 }
 
 async function renderFixedCosts() {
@@ -513,6 +598,22 @@ document.getElementById('open-fixed-modal').addEventListener('click', openFixedM
 document.getElementById('fixed-modal-cancel').addEventListener('click', closeFixedModal);
 googleSignInButton.addEventListener('click', handleGoogleSignIn);
 googleSignOutButton.addEventListener('click', handleGoogleSignOut);
+document.getElementById('add-category-button').addEventListener('click', () =>
+  addManagedOption({
+    storageKey: STORAGE_KEYS.categories,
+    defaults: DEFAULT_CATEGORIES,
+    inputId: 'add-category-input',
+    selectName: 'category',
+  })
+);
+document.getElementById('add-payment-button').addEventListener('click', () =>
+  addManagedOption({
+    storageKey: STORAGE_KEYS.paymentMethods,
+    defaults: DEFAULT_PAYMENT_METHODS,
+    inputId: 'add-payment-input',
+    selectName: 'paymentMethod',
+  })
+);
 
 fixedModal.addEventListener('click', (event) => {
   if (event.target === fixedModal) closeFixedModal();

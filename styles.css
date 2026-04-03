@@ -167,6 +167,12 @@ body {
   gap: 10px;
 }
 
+.inline-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 label {
   display: grid;
   gap: 5px;
