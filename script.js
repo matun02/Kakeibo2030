@@ -5,6 +5,9 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
+const APP_VERSION = '0.0';
+const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
+
 const STORAGE_KEYS = {
   fixedCosts: 'kakeibo_fixed_costs',
   expenses: 'kakeibo_expenses',
@@ -26,6 +29,7 @@ const screens = {
 const expenseForm = document.getElementById('expense-form');
 const fixedForm = document.getElementById('fixed-form');
 const fixedModal = document.getElementById('fixed-modal');
+const expenseScreenTitle = document.getElementById('expense-screen-title');
 const googleSignInButton = document.getElementById('google-signin');
 const googleSignOutButton = document.getElementById('google-signout');
 const syncStatusLabel = document.getElementById('sync-status-text');
@@ -35,6 +39,7 @@ const formatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 
 let selectedMonth = startOfMonth(new Date());
 let isSubmittingFixedCost = false;
 let editingExpenseId = null;
+let isSyncingNow = false;
 
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
@@ -121,6 +126,7 @@ function updateSyncStatus(status) {
   };
   syncStatusLabel.textContent = statusMap[status] || 'Offline';
   syncStatusLabel.dataset.state = status;
+  setSyncButtonLock(status === 'syncing');
 }
 
 function formatAmount(value) {
@@ -172,6 +178,7 @@ async function showScreen(screenName) {
   if (screenName === 'expense') {
     await renderExpenseOptions();
     setExpenseDefaultDate();
+    setExpenseScreenTitle();
   }
 }
 
@@ -183,6 +190,56 @@ function setExpenseDefaultDate() {
 
 function resetExpenseEditor() {
   editingExpenseId = null;
+  setExpenseScreenTitle();
+}
+
+function setExpenseScreenTitle() {
+  expenseScreenTitle.textContent = editingExpenseId ? '編集' : '支出入力';
+}
+
+function setSyncButtonLock(locked) {
+  isSyncingNow = locked;
+  document.querySelectorAll('button').forEach((button) => {
+    if (locked) {
+      button.dataset.syncWasDisabled = button.disabled ? '1' : '0';
+      button.disabled = true;
+      return;
+    }
+
+    if (button.dataset.syncWasDisabled === '0') {
+      button.disabled = false;
+    }
+    delete button.dataset.syncWasDisabled;
+  });
+}
+
+function clearAppStorageByPrefix(prefix) {
+  const keys = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key && key.startsWith(prefix)) keys.push(key);
+  }
+  keys.forEach((key) => localStorage.removeItem(key));
+}
+
+async function resetWebCaches() {
+  if ('caches' in window) {
+    const cacheKeys = await caches.keys();
+    await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)));
+  }
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  }
+}
+
+async function ensureAppVersion() {
+  const savedVersion = localStorage.getItem(APP_VERSION_STORAGE_KEY);
+  if (savedVersion === APP_VERSION) return;
+
+  clearAppStorageByPrefix('kakeibo_');
+  await resetWebCaches();
+  localStorage.setItem(APP_VERSION_STORAGE_KEY, APP_VERSION);
 }
 
 async function renderDashboard() {
@@ -224,6 +281,7 @@ async function renderDashboard() {
       if (!targetExpense) return;
       await showScreen('expense');
       editingExpenseId = targetExpense.id;
+      setExpenseScreenTitle();
       expenseForm.amount.value = targetExpense.amount;
       expenseForm.itemName.value = targetExpense.itemName;
       expenseForm.date.value = targetExpense.date;
@@ -458,6 +516,7 @@ async function renderAll() {
   if (!screens.dashboard.classList.contains('hidden')) await renderDashboard();
   if (!screens.analysis.classList.contains('hidden')) await renderAnalysis();
   if (!screens.fixed.classList.contains('hidden')) await renderFixedCosts();
+  if (isSyncingNow) setSyncButtonLock(true);
 }
 
 async function getManagedOptions(storageKey, defaults) {
@@ -742,6 +801,7 @@ fixedForm.addEventListener('submit', async (event) => {
 });
 
 (async function bootstrap() {
+  await ensureAppVersion();
   setSyncButtonLoading(true, 'Loading Google...');
   updateAuthButtons();
   updateSyncStatus('offline');
