@@ -783,6 +783,36 @@ async function copyMonthFixedCosts(sourceDate, targetDate, { markConfigured = fa
   if (markConfigured) await markMonthFixedCostConfigured(targetDate);
 }
 
+function isSameFixedCostItem(left, right) {
+  return String(left?.itemName || '').trim() === String(right?.itemName || '').trim();
+}
+
+async function appendMissingFixedCostsToNextMonthIfUnconfigured(sourceDate) {
+  const sourceMonth = startOfMonth(sourceDate);
+  const targetMonth = nextMonth(sourceMonth);
+  const targetConfigured = await isMonthFixedCostConfigured(targetMonth);
+  if (targetConfigured) return;
+
+  const sourceKey = monthKeyFromDate(sourceMonth);
+  const targetKey = monthKeyFromDate(targetMonth);
+  const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+  const sourceItems = fixedCosts.filter((item) => item.monthKey === sourceKey);
+  const targetItems = fixedCosts.filter((item) => item.monthKey === targetKey);
+  if (sourceItems.length === 0) return;
+
+  const additions = sourceItems
+    .filter((sourceItem) => !targetItems.some((targetItem) => isSameFixedCostItem(sourceItem, targetItem)))
+    .map((item) => ({
+      id: crypto.randomUUID(),
+      monthKey: targetKey,
+      itemName: item.itemName,
+      amount: Number(item.amount),
+    }));
+
+  if (additions.length === 0) return;
+  await saveLocalData(STORAGE_KEYS.fixedCosts, [...fixedCosts, ...additions]);
+}
+
 async function promptCurrentMonthFixedCostsIfNeeded() {
   const currentMonth = startOfMonth(new Date());
   const isConfigured = await isMonthFixedCostConfigured(currentMonth);
@@ -893,6 +923,7 @@ document.getElementById('fixed-back').addEventListener('click', async () => {
 });
 document.getElementById('fixed-save-month').addEventListener('click', async () => {
   await markMonthFixedCostConfigured(selectedMonth);
+  await appendMissingFixedCostsToNextMonthIfUnconfigured(selectedMonth);
   if (pendingNextMonthReviewMonthKey === monthKeyFromDate(selectedMonth)) {
     pendingNextMonthReviewMonthKey = null;
   }
