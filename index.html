@@ -30,6 +30,7 @@
           </div>
           <p class="total-amount" id="monthly-total">¥0</p>
           <p class="total-breakdown" id="monthly-breakdown"></p>
+          <p class="item-sub" id="fixed-setup-status">0000年00月 未設定</p>
         </div>
 
         <div class="card">
@@ -102,12 +103,14 @@
       <section id="screen-fixed" class="screen hidden" aria-label="固定費入力画面">
         <div class="card">
           <div class="card-title-row">
-            <h2>固定費入力</h2>
+            <h2 id="fixed-screen-title">固定費入力（0000年00月）</h2>
             <button id="open-fixed-modal" class="btn btn-primary">新規追加</button>
           </div>
+          <p class="item-sub" id="fixed-screen-status">0000年00月 未設定</p>
           <ul id="fixed-cost-list" class="fixed-cost-list"></ul>
           <p id="fixed-empty" class="empty-text">固定費が未登録です。まず1件登録してください。</p>
           <div class="form-actions">
+            <button id="fixed-save-month" class="btn btn-primary">この月を設定済みにする</button>
             <button id="fixed-back" class="btn btn-light">完了/戻る</button>
           </div>
         </div>
