@@ -141,9 +141,6 @@ function updateSyncStatus(status) {
   syncStatusLabel.textContent = statusMap[status] || 'Offline';
   syncStatusLabel.dataset.state = status;
   setSyncButtonLock(status === 'syncing');
-  if (status === 'synced') {
-    runPostSyncFixedCostFlow().catch(console.error);
-  }
 }
 
 function formatAmount(value) {
@@ -867,6 +864,7 @@ async function handleGoogleSignIn() {
     }
 
     await renderAll();
+    await runPostSyncFixedCostFlow();
   } catch (error) {
     updateSyncStatus('error');
     alert(`Google Drive同期に失敗しました: ${error.message || error}`);
@@ -1024,6 +1022,7 @@ fixedForm.addEventListener('submit', async (event) => {
     updateSyncStatus('idle');
     await tryAutoLoginAndLoadDriveData();
     await renderAll();
+    await runPostSyncFixedCostFlow();
   } catch (error) {
     updateSyncStatus('error');
     setSyncButtonLoading(true, 'Google unavailable');
