@@ -10,6 +10,8 @@ const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
   fixedCosts: 'kakeibo_fixed_costs',
+  fixedCostMonthStatus: 'kakeibo_fixed_cost_month_status',
+  fixedCostReviewPromptedAt: 'kakeibo_fixed_cost_review_prompted_at',
   expenses: 'kakeibo_expenses',
   categories: 'kakeibo_categories',
   paymentMethods: 'kakeibo_payment_methods',
@@ -40,6 +42,8 @@ let selectedMonth = startOfMonth(new Date());
 let isSubmittingFixedCost = false;
 let editingExpenseId = null;
 let isSyncingNow = false;
+let didRunPostSyncFixedFlow = false;
+let pendingNextMonthReviewMonthKey = null;
 
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
@@ -69,6 +73,8 @@ async function getLocalSnapshot() {
     version: 1,
     updatedAt: new Date().toISOString(),
     fixedCosts: await loadLocalData(STORAGE_KEYS.fixedCosts),
+    fixedCostMonthStatus: await loadLocalData(STORAGE_KEYS.fixedCostMonthStatus),
+    fixedCostReviewPromptedAt: localStorage.getItem(STORAGE_KEYS.fixedCostReviewPromptedAt) || '',
     expenses: await loadLocalData(STORAGE_KEYS.expenses),
     categories: await loadLocalData(STORAGE_KEYS.categories),
     paymentMethods: await loadLocalData(STORAGE_KEYS.paymentMethods),
@@ -77,6 +83,14 @@ async function getLocalSnapshot() {
 
 async function applySnapshotToLocal(snapshot) {
   await saveLocalData(STORAGE_KEYS.fixedCosts, Array.isArray(snapshot.fixedCosts) ? snapshot.fixedCosts : [], { skipCloudSync: true });
+  await saveLocalData(
+    STORAGE_KEYS.fixedCostMonthStatus,
+    snapshot.fixedCostMonthStatus && typeof snapshot.fixedCostMonthStatus === 'object' ? snapshot.fixedCostMonthStatus : {},
+    { skipCloudSync: true }
+  );
+  if (typeof snapshot.fixedCostReviewPromptedAt === 'string' && snapshot.fixedCostReviewPromptedAt) {
+    localStorage.setItem(STORAGE_KEYS.fixedCostReviewPromptedAt, snapshot.fixedCostReviewPromptedAt);
+  }
   await saveLocalData(STORAGE_KEYS.expenses, Array.isArray(snapshot.expenses) ? snapshot.expenses : [], { skipCloudSync: true });
   await saveLocalData(STORAGE_KEYS.categories, Array.isArray(snapshot.categories) ? snapshot.categories : [], { skipCloudSync: true });
   await saveLocalData(STORAGE_KEYS.paymentMethods, Array.isArray(snapshot.paymentMethods) ? snapshot.paymentMethods : [], { skipCloudSync: true });
@@ -127,6 +141,9 @@ function updateSyncStatus(status) {
   syncStatusLabel.textContent = statusMap[status] || 'Offline';
   syncStatusLabel.dataset.state = status;
   setSyncButtonLock(status === 'syncing');
+  if (status === 'synced') {
+    runPostSyncFixedCostFlow().catch(console.error);
+  }
 }
 
 function formatAmount(value) {
@@ -148,6 +165,22 @@ function startOfMonth(date) {
 
 function monthLabel(date) {
   return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`;
+}
+
+function monthKeyFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthDateFromKey(monthKey) {
+  const [yearText, monthText] = String(monthKey).split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!year || !month) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function nextMonth(date) {
+  return startOfMonth(new Date(date.getFullYear(), date.getMonth() + 1, 1));
 }
 
 async function moveMonth(offset) {
@@ -213,6 +246,67 @@ function setSyncButtonLock(locked) {
   });
 }
 
+async function loadFixedMonthStatusMap() {
+  const saved = await loadLocalData(STORAGE_KEYS.fixedCostMonthStatus);
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+  return saved;
+}
+
+async function saveFixedMonthStatusMap(statusMap) {
+  await saveLocalData(STORAGE_KEYS.fixedCostMonthStatus, statusMap);
+}
+
+function makeFixedStatusText(date, isConfigured) {
+  return `${monthLabel(date)} ${isConfigured ? '設定済み' : '未設定'}`;
+}
+
+async function isMonthFixedCostConfigured(targetDate) {
+  const monthKey = monthKeyFromDate(targetDate);
+  const statusMap = await loadFixedMonthStatusMap();
+  return Boolean(statusMap[monthKey]);
+}
+
+async function markMonthFixedCostConfigured(targetDate) {
+  const monthKey = monthKeyFromDate(targetDate);
+  const statusMap = await loadFixedMonthStatusMap();
+  statusMap[monthKey] = true;
+  await saveFixedMonthStatusMap(statusMap);
+}
+
+async function findLatestFixedCostsBeforeMonth(targetMonthKey) {
+  const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+  const targetDate = monthDateFromKey(targetMonthKey);
+  if (!targetDate) return [];
+  const grouped = new Map();
+  fixedCosts.forEach((item) => {
+    if (!item.monthKey) return;
+    if (!grouped.has(item.monthKey)) grouped.set(item.monthKey, []);
+    grouped.get(item.monthKey).push(item);
+  });
+  const latestKey = [...grouped.keys()]
+    .map((key) => ({ key, date: monthDateFromKey(key) }))
+    .filter((entry) => entry.date && entry.date < targetDate)
+    .sort((a, b) => b.date - a.date)[0]?.key;
+  if (!latestKey) return [];
+  return grouped.get(latestKey) || [];
+}
+
+async function ensureMonthFixedCostsDefault(targetDate) {
+  const monthKey = monthKeyFromDate(targetDate);
+  const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+  const existing = fixedCosts.filter((item) => item.monthKey === monthKey);
+  if (existing.length > 0) return;
+  const defaults = await findLatestFixedCostsBeforeMonth(monthKey);
+  if (defaults.length === 0) return;
+  const copied = defaults.map((item) => ({
+    id: crypto.randomUUID(),
+    monthKey,
+    itemName: item.itemName,
+    amount: Number(item.amount),
+  }));
+  await saveLocalData(STORAGE_KEYS.fixedCosts, [...fixedCosts, ...copied]);
+}
+
 function clearAppStorageByPrefix(prefix) {
   const keys = [];
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -246,9 +340,11 @@ async function renderDashboard() {
   renderMonthLabels();
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
   const expenses = await loadLocalData(STORAGE_KEYS.expenses);
+  const monthKey = monthKeyFromDate(selectedMonth);
   const monthlyExpenses = expenses.filter((entry) => isSelectedMonth(entry.date));
+  const monthlyFixedCosts = fixedCosts.filter((item) => item.monthKey === monthKey);
 
-  const fixedTotal = fixedCosts.reduce((sum, item) => sum + Number(item.amount), 0);
+  const fixedTotal = monthlyFixedCosts.reduce((sum, item) => sum + Number(item.amount), 0);
   const expenseTotal = monthlyExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
 
   document.getElementById('monthly-total').textContent = formatAmount(fixedTotal + expenseTotal);
@@ -309,6 +405,8 @@ async function renderDashboard() {
 
   expenseCount.textContent = `${monthlyExpenses.length}件`;
   expenseEmpty.classList.toggle('hidden', monthlyExpenses.length > 0);
+  const configured = await isMonthFixedCostConfigured(selectedMonth);
+  document.getElementById('fixed-setup-status').textContent = makeFixedStatusText(selectedMonth, configured);
 }
 
 function getPastCumulativeAverages(allExpenses) {
@@ -593,12 +691,18 @@ async function addManagedOption({ storageKey, defaults, inputId, selectName }) {
 }
 
 async function renderFixedCosts() {
+  await ensureMonthFixedCostsDefault(selectedMonth);
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+  const monthKey = monthKeyFromDate(selectedMonth);
+  const monthlyFixedCosts = fixedCosts.filter((item) => item.monthKey === monthKey);
   const list = document.getElementById('fixed-cost-list');
   const empty = document.getElementById('fixed-empty');
+  const configured = await isMonthFixedCostConfigured(selectedMonth);
+  document.getElementById('fixed-screen-title').textContent = `固定費入力（${monthLabel(selectedMonth)}）`;
+  document.getElementById('fixed-screen-status').textContent = makeFixedStatusText(selectedMonth, configured);
   list.innerHTML = '';
 
-  fixedCosts.forEach((item) => {
+  monthlyFixedCosts.forEach((item) => {
     const li = document.createElement('li');
     li.className = 'list-item';
 
@@ -628,7 +732,7 @@ async function renderFixedCosts() {
     list.appendChild(li);
   });
 
-  empty.classList.toggle('hidden', fixedCosts.length > 0);
+  empty.classList.toggle('hidden', monthlyFixedCosts.length > 0);
 }
 
 function openFixedModal() {
@@ -653,12 +757,74 @@ function escapeHtml(text) {
 }
 
 async function initializeRoute() {
+  await showScreen('dashboard');
+}
+
+async function normalizeFixedCostsSchema() {
   const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
-  if (fixedCosts.length === 0) {
+  if (!Array.isArray(fixedCosts) || fixedCosts.length === 0) return;
+  if (fixedCosts.every((item) => item.monthKey)) return;
+  const currentMonthKey = monthKeyFromDate(new Date());
+  const normalized = fixedCosts.map((item) => ({
+    ...item,
+    monthKey: item.monthKey || currentMonthKey,
+  }));
+  await saveLocalData(STORAGE_KEYS.fixedCosts, normalized, { skipCloudSync: true });
+}
+
+async function copyMonthFixedCosts(sourceDate, targetDate, { markConfigured = false } = {}) {
+  const sourceKey = monthKeyFromDate(sourceDate);
+  const targetKey = monthKeyFromDate(targetDate);
+  const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
+  const source = fixedCosts.filter((item) => item.monthKey === sourceKey);
+  const withoutTarget = fixedCosts.filter((item) => item.monthKey !== targetKey);
+  const copied = source.map((item) => ({
+    id: crypto.randomUUID(),
+    monthKey: targetKey,
+    itemName: item.itemName,
+    amount: Number(item.amount),
+  }));
+  await saveLocalData(STORAGE_KEYS.fixedCosts, [...withoutTarget, ...copied]);
+  if (markConfigured) await markMonthFixedCostConfigured(targetDate);
+}
+
+async function promptCurrentMonthFixedCostsIfNeeded() {
+  const currentMonth = startOfMonth(new Date());
+  const isConfigured = await isMonthFixedCostConfigured(currentMonth);
+  if (isConfigured) return;
+  alert(makeFixedStatusText(currentMonth, false));
+  const accepted = window.confirm('今月の固定費を入力しませんか?');
+  if (!accepted) return;
+  selectedMonth = currentMonth;
+  await showScreen('fixed');
+}
+
+async function promptNextMonthReviewIfNeeded() {
+  const now = new Date();
+  if (now.getDate() < 15) return;
+  const currentMonth = startOfMonth(now);
+  const next = nextMonth(now);
+  const promptKey = `${monthKeyFromDate(currentMonth)}_next`;
+  if (localStorage.getItem(STORAGE_KEYS.fixedCostReviewPromptedAt) === promptKey) return;
+  localStorage.setItem(STORAGE_KEYS.fixedCostReviewPromptedAt, promptKey);
+  const accepted = window.confirm('来月の固定費を見直して見ませんか?');
+  if (accepted) {
+    selectedMonth = next;
+    pendingNextMonthReviewMonthKey = monthKeyFromDate(next);
+    await ensureMonthFixedCostsDefault(next);
     await showScreen('fixed');
-  } else {
-    await showScreen('dashboard');
+    return;
   }
+  pendingNextMonthReviewMonthKey = null;
+  await copyMonthFixedCosts(currentMonth, next, { markConfigured: true });
+}
+
+async function runPostSyncFixedCostFlow() {
+  if (didRunPostSyncFixedFlow) return;
+  didRunPostSyncFixedFlow = true;
+  await promptCurrentMonthFixedCostsIfNeeded();
+  await promptNextMonthReviewIfNeeded();
+  await renderAll();
 }
 
 async function handleGoogleSignIn() {
@@ -720,7 +886,25 @@ document.getElementById('expense-cancel').addEventListener('click', async () => 
   setExpenseDefaultDate();
   await showScreen('dashboard');
 });
-document.getElementById('fixed-back').addEventListener('click', () => showScreen('dashboard'));
+document.getElementById('fixed-back').addEventListener('click', async () => {
+  if (pendingNextMonthReviewMonthKey === monthKeyFromDate(selectedMonth)) {
+    const configured = await isMonthFixedCostConfigured(selectedMonth);
+    if (!configured) {
+      await copyMonthFixedCosts(startOfMonth(new Date()), selectedMonth, { markConfigured: true });
+    }
+    pendingNextMonthReviewMonthKey = null;
+  }
+  await showScreen('dashboard');
+});
+document.getElementById('fixed-save-month').addEventListener('click', async () => {
+  await markMonthFixedCostConfigured(selectedMonth);
+  if (pendingNextMonthReviewMonthKey === monthKeyFromDate(selectedMonth)) {
+    pendingNextMonthReviewMonthKey = null;
+  }
+  await renderFixedCosts();
+  await renderDashboard();
+  await showScreen('dashboard');
+});
 document.getElementById('open-fixed-modal').addEventListener('click', openFixedModal);
 document.getElementById('fixed-modal-cancel').addEventListener('click', closeFixedModal);
 googleSignInButton.addEventListener('click', handleGoogleSignIn);
@@ -784,6 +968,7 @@ fixedForm.addEventListener('submit', async (event) => {
   try {
     const newFixedCost = {
       id: crypto.randomUUID(),
+      monthKey: monthKeyFromDate(selectedMonth),
       itemName: fixedForm.itemName.value.trim(),
       amount: Number(fixedForm.amount.value),
     };
@@ -802,6 +987,7 @@ fixedForm.addEventListener('submit', async (event) => {
 
 (async function bootstrap() {
   await ensureAppVersion();
+  await normalizeFixedCostsSchema();
   setSyncButtonLoading(true, 'Loading Google...');
   updateAuthButtons();
   updateSyncStatus('offline');
