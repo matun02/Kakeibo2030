@@ -226,21 +226,39 @@ async function renderDashboard() {
   expenseEmpty.classList.toggle('hidden', monthlyExpenses.length > 0);
 }
 
-function getPastDailyAverages(allExpenses) {
+function getPastCumulativeAverages(allExpenses) {
   const year = selectedMonth.getFullYear();
   const month = selectedMonth.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const monthStart = startOfMonth(selectedMonth);
-  const totals = Array.from({ length: daysInMonth }, () => 0);
-  const counts = Array.from({ length: daysInMonth }, () => 0);
+  const monthTotals = new Map();
 
   allExpenses.forEach((entry) => {
     const entryDate = new Date(entry.date);
     if (Number.isNaN(entryDate.getTime()) || entryDate >= monthStart) return;
     const day = entryDate.getDate();
-    if (day > daysInMonth) return;
-    totals[day - 1] += Number(entry.amount);
-    counts[day - 1] += 1;
+    const entryMonthDays = new Date(entryDate.getFullYear(), entryDate.getMonth() + 1, 0).getDate();
+    const monthKey = `${entryDate.getFullYear()}-${entryDate.getMonth()}`;
+    if (!monthTotals.has(monthKey)) {
+      monthTotals.set(monthKey, {
+        daysInThisMonth: Math.min(entryMonthDays, daysInMonth),
+        totalsByDay: Array.from({ length: daysInMonth }, () => 0),
+      });
+    }
+    const monthData = monthTotals.get(monthKey);
+    if (day > monthData.daysInThisMonth) return;
+    monthData.totalsByDay[day - 1] += Number(entry.amount);
+  });
+
+  const totals = Array.from({ length: daysInMonth }, () => 0);
+  const counts = Array.from({ length: daysInMonth }, () => 0);
+  monthTotals.forEach(({ totalsByDay, daysInThisMonth }) => {
+    let runningTotal = 0;
+    for (let dayIndex = 0; dayIndex < daysInThisMonth; dayIndex += 1) {
+      runningTotal += totalsByDay[dayIndex];
+      totals[dayIndex] += runningTotal;
+      counts[dayIndex] += 1;
+    }
   });
 
   return totals.map((total, index) => (counts[index] > 0 ? total / counts[index] : 0));
@@ -261,8 +279,13 @@ function drawLineChart(canvas, expenses, pastAverages) {
     const day = new Date(entry.date).getDate();
     totalsByDay[day - 1] += Number(entry.amount);
   });
+  const cumulativeTotalsByDay = totalsByDay.reduce((acc, value, index) => {
+    const previous = index > 0 ? acc[index - 1] : 0;
+    acc.push(previous + value);
+    return acc;
+  }, []);
 
-  const yMax = 100000;
+  const yMax = Math.max(100000, ...cumulativeTotalsByDay, ...pastAverages);
   const left = 44;
   const right = width - 14;
   const top = 16;
@@ -271,9 +294,11 @@ function drawLineChart(canvas, expenses, pastAverages) {
 
   const yForValue = (value) => bottom - ((bottom - top) * Math.min(Math.max(value, 0), yMax)) / yMax;
 
+  const yTickValues = [0, Math.round(yMax / 2), yMax];
+
   ctx.lineWidth = 1;
   ctx.strokeStyle = '#cbd5e1';
-  [0, 50000, 100000].forEach((value) => {
+  yTickValues.forEach((value) => {
     const y = yForValue(value);
     ctx.beginPath();
     ctx.moveTo(left, y);
@@ -295,7 +320,7 @@ function drawLineChart(canvas, expenses, pastAverages) {
   ctx.strokeStyle = '#4f46e5';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  totalsByDay.forEach((value, index) => {
+  cumulativeTotalsByDay.forEach((value, index) => {
     const x = left + xStep * index;
     const y = yForValue(value);
     if (index === 0) ctx.moveTo(x, y);
@@ -305,20 +330,21 @@ function drawLineChart(canvas, expenses, pastAverages) {
 
   ctx.fillStyle = '#64748b';
   ctx.font = '12px sans-serif';
-  ctx.fillText('0万', 8, yForValue(0) + 4);
-  ctx.fillText('5万', 8, yForValue(50000) + 4);
-  ctx.fillText('10万', 8, yForValue(100000) + 4);
+  yTickValues.forEach((value) => {
+    const tickLabel = `${Math.round(value / 10000)}万`;
+    ctx.fillText(tickLabel, 8, yForValue(value) + 4);
+  });
   ctx.fillText('1日', left, height - 10);
   ctx.fillText(`${daysInMonth}日`, right - 28, height - 10);
 
   ctx.fillStyle = '#4f46e5';
   ctx.fillRect(width - 220, 14, 12, 2);
   ctx.fillStyle = '#1f2a44';
-  ctx.fillText('当月日次支出', width - 202, 18);
+  ctx.fillText('当月累計支出', width - 202, 18);
   ctx.fillStyle = '#a5b4fc';
   ctx.fillRect(width - 220, 32, 12, 2);
   ctx.fillStyle = '#1f2a44';
-  ctx.fillText('過去同日平均', width - 202, 36);
+  ctx.fillText('過去同日累計平均', width - 202, 36);
 }
 
 function drawPieChart(canvas, expenses) {
@@ -376,7 +402,7 @@ async function renderAnalysis() {
   const pieCanvas = document.getElementById('payment-pie-chart');
   const lineEmpty = document.getElementById('line-empty');
   const pieEmpty = document.getElementById('pie-empty');
-  const pastAverages = getPastDailyAverages(allExpenses);
+  const pastAverages = getPastCumulativeAverages(allExpenses);
 
   drawLineChart(lineCanvas, expenses, pastAverages);
   drawPieChart(pieCanvas, expenses);
