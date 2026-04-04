@@ -729,7 +729,7 @@ async function renderFixedCosts() {
 
     const main = document.createElement('div');
     main.className = 'item-main';
-    main.innerHTML = `<strong>${escapeHtml(item.itemName)}</strong><span class="item-sub">毎月固定</span>`;
+    main.innerHTML = `<strong>${escapeHtml(item.itemName)}</strong>`;
 
     const right = document.createElement('div');
     right.className = 'item-main';
@@ -991,7 +991,7 @@ document.getElementById('fixed-save-month').addEventListener('click', async () =
   await renderDashboard();
   await showScreen('dashboard');
 });
-document.getElementById('open-fixed-modal').addEventListener('click', openFixedModal);
+document.getElementById('open-fixed-modal').addEventListener('click', () => openFixedModal());
 document.getElementById('fixed-modal-cancel').addEventListener('click', closeFixedModal);
 googleSignInButton.addEventListener('click', handleGoogleSignIn);
 googleSignOutButton.addEventListener('click', handleGoogleSignOut);
