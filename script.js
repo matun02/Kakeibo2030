@@ -5,7 +5,7 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
-const APP_VERSION = '0.1';
+const APP_VERSION = '0.2';
 const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
@@ -31,6 +31,8 @@ const screens = {
 const expenseForm = document.getElementById('expense-form');
 const fixedForm = document.getElementById('fixed-form');
 const fixedModal = document.getElementById('fixed-modal');
+const fixedModalTitle = document.getElementById('fixed-modal-title');
+const fixedModalSubmitButton = document.getElementById('fixed-modal-submit');
 const expenseScreenTitle = document.getElementById('expense-screen-title');
 const googleSignInButton = document.getElementById('google-signin');
 const googleSignOutButton = document.getElementById('google-signout');
@@ -40,6 +42,7 @@ const fixedSubmitButton = fixedForm.querySelector('button[type="submit"]');
 const formatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 let selectedMonth = startOfMonth(new Date());
 let isSubmittingFixedCost = false;
+let editingFixedCostId = null;
 let editingExpenseId = null;
 let isSyncingNow = false;
 let didRunPostSyncFixedFlow = false;
@@ -745,6 +748,20 @@ async function renderFixedCosts() {
       await renderDashboard();
     });
 
+    li.addEventListener('click', () => openFixedModal(item));
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    li.setAttribute('aria-label', `${item.itemName}を編集`);
+    li.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openFixedModal(item);
+      }
+    });
+    del.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+
     right.append(amount, del);
     li.append(main, right);
     list.appendChild(li);
@@ -753,14 +770,30 @@ async function renderFixedCosts() {
   empty.classList.toggle('hidden', monthlyFixedCosts.length > 0);
 }
 
-function openFixedModal() {
+function setFixedModalMode(item = null) {
+  if (item) {
+    editingFixedCostId = item.id;
+    fixedModalTitle.textContent = '固定費を編集';
+    fixedModalSubmitButton.textContent = '保存';
+    fixedForm.itemName.value = item.itemName;
+    fixedForm.amount.value = Number(item.amount);
+    return;
+  }
+  editingFixedCostId = null;
+  fixedModalTitle.textContent = '固定費を追加';
+  fixedModalSubmitButton.textContent = '追加';
+  fixedForm.reset();
+}
+
+function openFixedModal(item = null) {
+  setFixedModalMode(item);
   fixedModal.classList.remove('hidden');
   fixedForm.itemName.focus();
 }
 
 function closeFixedModal() {
   fixedModal.classList.add('hidden');
-  fixedForm.reset();
+  setFixedModalMode(null);
 }
 
 function escapeHtml(text) {
@@ -1019,16 +1052,24 @@ fixedForm.addEventListener('submit', async (event) => {
   fixedSubmitButton.disabled = true;
 
   try {
-    const newFixedCost = {
-      id: crypto.randomUUID(),
-      monthKey: monthKeyFromDate(selectedMonth),
-      itemName: fixedForm.itemName.value.trim(),
-      amount: Number(fixedForm.amount.value),
-    };
-
     const fixedCosts = await loadLocalData(STORAGE_KEYS.fixedCosts);
-    fixedCosts.push(newFixedCost);
-    await saveLocalData(STORAGE_KEYS.fixedCosts, fixedCosts);
+    if (editingFixedCostId) {
+      const updated = fixedCosts.map((item) =>
+        item.id === editingFixedCostId
+          ? { ...item, itemName: fixedForm.itemName.value.trim(), amount: Number(fixedForm.amount.value) }
+          : item
+      );
+      await saveLocalData(STORAGE_KEYS.fixedCosts, updated);
+    } else {
+      const newFixedCost = {
+        id: crypto.randomUUID(),
+        monthKey: monthKeyFromDate(selectedMonth),
+        itemName: fixedForm.itemName.value.trim(),
+        amount: Number(fixedForm.amount.value),
+      };
+      fixedCosts.push(newFixedCost);
+      await saveLocalData(STORAGE_KEYS.fixedCosts, fixedCosts);
+    }
 
     closeFixedModal();
     await renderAll();
