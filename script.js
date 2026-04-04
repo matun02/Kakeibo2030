@@ -5,7 +5,7 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
-const APP_VERSION = '0.0';
+const APP_VERSION = '0.1';
 const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
