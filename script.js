@@ -358,7 +358,10 @@ async function renderDashboard() {
       </div>
       <div class="item-actions">
         <span class="item-amount">${formatAmount(expense.amount)}</span>
-        <button class="btn btn-danger expense-delete" data-expense-id="${expense.id}">削除</button>
+        <div class="expense-item-buttons">
+          <button class="btn btn-light expense-reregister" data-expense-id="${expense.id}">再登録</button>
+          <button class="btn btn-danger expense-delete" data-expense-id="${expense.id}">削除</button>
+        </div>
       </div>
     `;
     li.addEventListener('click', async () => {
@@ -388,6 +391,27 @@ async function renderDashboard() {
       const expenseId = button.dataset.expenseId;
       const updated = (await loadLocalData(STORAGE_KEYS.expenses)).filter((expense) => expense.id !== expenseId);
       await saveLocalData(STORAGE_KEYS.expenses, updated);
+      await renderAll();
+    });
+  });
+
+  expenseList.querySelectorAll('.expense-reregister').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const expenseId = button.dataset.expenseId;
+      const expensesInStorage = await loadLocalData(STORAGE_KEYS.expenses);
+      const original = expensesInStorage.find((entry) => entry.id === expenseId);
+      if (!original) return;
+
+      const copiedExpense = {
+        id: crypto.randomUUID(),
+        amount: Number(original.amount),
+        itemName: original.itemName,
+        date: todayString(),
+        category: original.category,
+        paymentMethod: original.paymentMethod,
+      };
+      await saveLocalData(STORAGE_KEYS.expenses, [...expensesInStorage, copiedExpense]);
       await renderAll();
     });
   });
