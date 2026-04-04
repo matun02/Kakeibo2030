@@ -501,25 +501,25 @@ function drawLineChart(canvas, expenses, pastAverages) {
   ctx.stroke();
 
   ctx.fillStyle = '#64748b';
-  ctx.font = '12px sans-serif';
+  ctx.font = '14px sans-serif';
   yTickValues.forEach((value) => {
     const tickLabel = `${Math.round(value / 10000)}万`;
     ctx.fillText(tickLabel, 8, yForValue(value) + 4);
   });
-  ctx.fillText('1日', left, height - 10);
-  ctx.fillText(`${daysInMonth}日`, right - 28, height - 10);
+  ctx.fillText('1日', left, height - 8);
+  ctx.fillText(`${daysInMonth}日`, right - 34, height - 8);
 
   ctx.fillStyle = '#4f46e5';
-  ctx.fillRect(width - 220, 14, 12, 2);
+  ctx.fillRect(width - 238, 14, 14, 3);
   ctx.fillStyle = '#1f2a44';
-  ctx.fillText('当月累計支出', width - 202, 18);
+  ctx.fillText('当月累計支出', width - 216, 21);
   ctx.fillStyle = '#a5b4fc';
-  ctx.fillRect(width - 220, 32, 12, 2);
+  ctx.fillRect(width - 238, 38, 14, 3);
   ctx.fillStyle = '#1f2a44';
-  ctx.fillText('過去同日累計平均', width - 202, 36);
+  ctx.fillText('過去同日累計平均', width - 216, 44);
 }
 
-function drawPieChart(canvas, expenses) {
+function drawPieChart(canvas, expenses, groupBy) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
@@ -527,11 +527,12 @@ function drawPieChart(canvas, expenses) {
   if (expenses.length === 0) return;
 
   const total = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
-  const byPayment = expenses.reduce((acc, item) => {
-    acc[item.paymentMethod] = (acc[item.paymentMethod] || 0) + Number(item.amount);
+  const grouped = expenses.reduce((acc, item) => {
+    const groupName = String(item[groupBy] || '未分類');
+    acc[groupName] = (acc[groupName] || 0) + Number(item.amount);
     return acc;
   }, {});
-  const entries = Object.entries(byPayment);
+  const entries = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
 
   const colors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   let startAngle = -Math.PI / 2;
@@ -551,15 +552,15 @@ function drawPieChart(canvas, expenses) {
     startAngle = endAngle;
   });
 
-  ctx.font = '13px sans-serif';
+  ctx.font = '15px sans-serif';
   entries.forEach(([name, value], index) => {
-    const y = 48 + index * 24;
+    const y = 44 + index * 26;
     const color = colors[index % colors.length];
     const ratioText = `${Math.round((value / total) * 100)}%`;
     ctx.fillStyle = color;
-    ctx.fillRect(260, y - 11, 12, 12);
+    ctx.fillRect(260, y - 13, 14, 14);
     ctx.fillStyle = '#1f2a44';
-    ctx.fillText(`${name}: ${ratioText} (${formatAmount(value)})`, 280, y);
+    ctx.fillText(`${name}: ${ratioText} (${formatAmount(value)})`, 282, y);
   });
 }
 
@@ -571,14 +572,18 @@ async function renderAnalysis() {
   document.getElementById('analysis-variable-total').textContent = `流動費合計: ${formatAmount(variableTotal)}`;
 
   const lineCanvas = document.getElementById('daily-line-chart');
+  const categoryPieCanvas = document.getElementById('category-pie-chart');
   const pieCanvas = document.getElementById('payment-pie-chart');
   const lineEmpty = document.getElementById('line-empty');
+  const categoryPieEmpty = document.getElementById('category-pie-empty');
   const pieEmpty = document.getElementById('pie-empty');
   const pastAverages = getPastCumulativeAverages(allExpenses);
 
   drawLineChart(lineCanvas, expenses, pastAverages);
-  drawPieChart(pieCanvas, expenses);
+  drawPieChart(categoryPieCanvas, expenses, 'category');
+  drawPieChart(pieCanvas, expenses, 'paymentMethod');
   lineEmpty.classList.toggle('hidden', expenses.length > 0 || pastAverages.some((value) => value > 0));
+  categoryPieEmpty.classList.toggle('hidden', expenses.length > 0);
   pieEmpty.classList.toggle('hidden', expenses.length > 0);
 }
 
