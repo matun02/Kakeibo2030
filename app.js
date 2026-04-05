@@ -2,9 +2,7 @@ import GoogleDriveService from './GoogleDriveService.js';
 
 const GOOGLE_CONFIG = {
   CLIENT_ID: '1083922017545-gmt6evnv6kn3bfv7m3f7hu7oufeij2b8.apps.googleusercontent.com',
-  API_KEY: 'AIzaSyDPHBKFYqm_P7CmStYNVlbYbzfwFTNbjds',
   SCOPE: 'https://www.googleapis.com/auth/drive.appdata',
-  DISCOVERY_DOCS: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
 };
 
 const STORAGE_KEYS = {
@@ -33,9 +31,7 @@ let selectedMonth = startOfMonth(new Date());
 
 const driveService = new GoogleDriveService({
   clientId: GOOGLE_CONFIG.CLIENT_ID,
-  apiKey: GOOGLE_CONFIG.API_KEY,
   scope: GOOGLE_CONFIG.SCOPE,
-  discoveryDocs: GOOGLE_CONFIG.DISCOVERY_DOCS,
   fileName: DRIVE_FILE_NAME,
   onStatusChange: (status) => updateSyncStatus(status),
 });
