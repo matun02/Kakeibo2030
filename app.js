@@ -152,22 +152,34 @@ async function renderDashboard() {
   const expenseEmpty = document.getElementById('expense-empty');
   const expenseCount = document.getElementById('expense-count');
 
-  expenseList.innerHTML = '';
+  expenseList.replaceChildren();
   const sorted = [...monthlyExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   sorted.slice(0, 12).forEach((expense) => {
     const li = document.createElement('li');
     li.className = 'list-item';
-    li.innerHTML = `
-      <div class="item-main">
-        <strong>${escapeHtml(expense.itemName)}</strong>
-        <span class="item-sub">${expense.date} / ${expense.category} / ${expense.paymentMethod}</span>
-      </div>
-      <div class="item-actions">
-        <span class="item-amount">${formatAmount(expense.amount)}</span>
-        <button class="btn btn-danger expense-delete" data-expense-id="${expense.id}">削除</button>
-      </div>
-    `;
+    const main = document.createElement('div');
+    main.className = 'item-main';
+
+    const strong = document.createElement('strong');
+    strong.textContent = expense.itemName;
+    const sub = document.createElement('span');
+    sub.className = 'item-sub';
+    sub.textContent = `${expense.date} / ${expense.category} / ${expense.paymentMethod}`;
+    main.append(strong, sub);
+
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+    const amount = document.createElement('span');
+    amount.className = 'item-amount';
+    amount.textContent = formatAmount(expense.amount);
+    const del = document.createElement('button');
+    del.className = 'btn btn-danger expense-delete';
+    del.dataset.expenseId = expense.id;
+    del.textContent = '削除';
+    actions.append(amount, del);
+
+    li.append(main, actions);
     expenseList.appendChild(li);
   });
 
@@ -362,7 +374,7 @@ async function renderFixedCosts() {
   const fixedCosts = await loadData(STORAGE_KEYS.fixedCosts);
   const list = document.getElementById('fixed-cost-list');
   const empty = document.getElementById('fixed-empty');
-  list.innerHTML = '';
+  list.replaceChildren();
 
   fixedCosts.forEach((item) => {
     const li = document.createElement('li');
@@ -370,7 +382,12 @@ async function renderFixedCosts() {
 
     const main = document.createElement('div');
     main.className = 'item-main';
-    main.innerHTML = `<strong>${escapeHtml(item.itemName)}</strong><span class="item-sub">毎月固定</span>`;
+    const strong = document.createElement('strong');
+    strong.textContent = item.itemName;
+    const sub = document.createElement('span');
+    sub.className = 'item-sub';
+    sub.textContent = '毎月固定';
+    main.append(strong, sub);
 
     const right = document.createElement('div');
     right.className = 'item-main';
