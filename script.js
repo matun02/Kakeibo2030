@@ -442,7 +442,7 @@ async function renderDashboard() {
   const expenseEmpty = document.getElementById('expense-empty');
   const expenseCount = document.getElementById('expense-count');
 
-  expenseList.innerHTML = '';
+  expenseList.replaceChildren();
   const sorted = [...monthlyExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   sorted.slice(0, 12).forEach((expense) => {
@@ -782,7 +782,7 @@ async function renderExpenseOptions() {
   const selectedCategory = categorySelect.value;
   const selectedPayment = paymentSelect.value;
 
-  categorySelect.innerHTML = '';
+  categorySelect.replaceChildren();
   sortOptionsByUsage(categories, categoryUsage).forEach((name) => {
     const option = document.createElement('option');
     option.value = name;
@@ -790,7 +790,7 @@ async function renderExpenseOptions() {
     categorySelect.appendChild(option);
   });
 
-  paymentSelect.innerHTML = '';
+  paymentSelect.replaceChildren();
   sortOptionsByUsage(paymentMethods, paymentUsage).forEach((name) => {
     const option = document.createElement('option');
     option.value = name;
@@ -833,7 +833,7 @@ async function renderFixedCosts() {
   const configured = await isMonthFixedCostConfigured(selectedMonth);
   document.getElementById('fixed-screen-title').textContent = `固定費入力（${monthLabel(selectedMonth)}）`;
   document.getElementById('fixed-screen-status').textContent = makeFixedStatusText(selectedMonth, configured);
-  list.innerHTML = '';
+  list.replaceChildren();
 
   monthlyFixedCosts.forEach((item) => {
     const li = document.createElement('li');
