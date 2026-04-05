@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
 const DRIVE_FILE_NAME = 'kakeibo_data.json';
 const DEFAULT_CATEGORIES = ['内食', '外食', '生活用品', '趣味', '交際費'];
 const DEFAULT_PAYMENT_METHODS = ['現金', 'カード', 'PayPay', '楽天ペイ', '楽天キャッシュ'];
+const MAX_TEXT_LENGTH = 80;
 
 const screens = {
   dashboard: document.getElementById('screen-dashboard'),
@@ -85,18 +86,113 @@ async function getLocalSnapshot() {
 }
 
 async function applySnapshotToLocal(snapshot) {
-  await saveLocalData(STORAGE_KEYS.fixedCosts, Array.isArray(snapshot.fixedCosts) ? snapshot.fixedCosts : [], { skipCloudSync: true });
+  const fixedCosts = Array.isArray(snapshot.fixedCosts) ? snapshot.fixedCosts.map(sanitizeFixedCostRecord).filter(Boolean) : [];
+  const fixedCostMonthStatus = sanitizeFixedCostMonthStatusMap(snapshot.fixedCostMonthStatus);
+  const fixedCostReviewPromptedAt = sanitizeReviewPrompt(snapshot.fixedCostReviewPromptedAt);
+  const expenses = Array.isArray(snapshot.expenses) ? snapshot.expenses.map(sanitizeExpenseRecord).filter(Boolean) : [];
+  const categories = sanitizeManagedOptions(snapshot.categories);
+  const paymentMethods = sanitizeManagedOptions(snapshot.paymentMethods);
+
+  await saveLocalData(STORAGE_KEYS.fixedCosts, fixedCosts, { skipCloudSync: true });
   await saveLocalData(
     STORAGE_KEYS.fixedCostMonthStatus,
-    snapshot.fixedCostMonthStatus && typeof snapshot.fixedCostMonthStatus === 'object' ? snapshot.fixedCostMonthStatus : {},
+    fixedCostMonthStatus,
     { skipCloudSync: true }
   );
-  if (typeof snapshot.fixedCostReviewPromptedAt === 'string' && snapshot.fixedCostReviewPromptedAt) {
-    localStorage.setItem(STORAGE_KEYS.fixedCostReviewPromptedAt, snapshot.fixedCostReviewPromptedAt);
+  if (fixedCostReviewPromptedAt) {
+    localStorage.setItem(STORAGE_KEYS.fixedCostReviewPromptedAt, fixedCostReviewPromptedAt);
   }
-  await saveLocalData(STORAGE_KEYS.expenses, Array.isArray(snapshot.expenses) ? snapshot.expenses : [], { skipCloudSync: true });
-  await saveLocalData(STORAGE_KEYS.categories, Array.isArray(snapshot.categories) ? snapshot.categories : [], { skipCloudSync: true });
-  await saveLocalData(STORAGE_KEYS.paymentMethods, Array.isArray(snapshot.paymentMethods) ? snapshot.paymentMethods : [], { skipCloudSync: true });
+  await saveLocalData(STORAGE_KEYS.expenses, expenses, { skipCloudSync: true });
+  await saveLocalData(STORAGE_KEYS.categories, categories, { skipCloudSync: true });
+  await saveLocalData(STORAGE_KEYS.paymentMethods, paymentMethods, { skipCloudSync: true });
+}
+
+function sanitizeText(value, { maxLength = MAX_TEXT_LENGTH } = {}) {
+  const text = String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim();
+  if (!text) return '';
+  return text.slice(0, maxLength);
+}
+
+function sanitizeAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return Math.round(amount);
+}
+
+function isValidDateText(value) {
+  const text = String(value ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === text;
+}
+
+function isValidMonthKey(value) {
+  const text = String(value ?? '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) return false;
+  const [yearText, monthText] = text.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  return Number.isInteger(year) && Number.isInteger(month) && year >= 2000 && year <= 2100;
+}
+
+function sanitizeId(value) {
+  const id = sanitizeText(value, { maxLength: 64 });
+  return id || crypto.randomUUID();
+}
+
+function sanitizeExpenseRecord(record) {
+  if (!record || typeof record !== 'object') return null;
+  const amount = sanitizeAmount(record.amount);
+  const itemName = sanitizeText(record.itemName);
+  const category = sanitizeText(record.category);
+  const paymentMethod = sanitizeText(record.paymentMethod);
+  const date = String(record.date ?? '');
+  if (!amount || !itemName || !category || !paymentMethod || !isValidDateText(date)) return null;
+  return {
+    id: sanitizeId(record.id),
+    amount,
+    itemName,
+    date,
+    category,
+    paymentMethod,
+  };
+}
+
+function sanitizeFixedCostRecord(record) {
+  if (!record || typeof record !== 'object') return null;
+  const amount = sanitizeAmount(record.amount);
+  const itemName = sanitizeText(record.itemName);
+  const monthKey = String(record.monthKey ?? '');
+  if (!amount || !itemName || !isValidMonthKey(monthKey)) return null;
+  return {
+    id: sanitizeId(record.id),
+    monthKey,
+    itemName,
+    amount,
+  };
+}
+
+function sanitizeManagedOptions(options) {
+  if (!Array.isArray(options)) return [];
+  return [...new Set(options.map((value) => sanitizeText(value)).filter(Boolean))];
+}
+
+function sanitizeFixedCostMonthStatusMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.entries(value).reduce((acc, [key, status]) => {
+    if (isValidMonthKey(key)) {
+      acc[key] = Boolean(status);
+    }
+    return acc;
+  }, {});
+}
+
+function sanitizeReviewPrompt(value) {
+  const text = sanitizeText(value, { maxLength: 32 });
+  return /^[0-9]{4}-(0[1-9]|1[0-2])_next$/.test(text) ? text : '';
 }
 
 
@@ -346,7 +442,7 @@ async function renderDashboard() {
   const expenseEmpty = document.getElementById('expense-empty');
   const expenseCount = document.getElementById('expense-count');
 
-  expenseList.innerHTML = '';
+  expenseList.replaceChildren();
   const sorted = [...monthlyExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   sorted.slice(0, 12).forEach((expense) => {
@@ -354,19 +450,35 @@ async function renderDashboard() {
     li.className = 'list-item';
     li.setAttribute('role', 'button');
     li.setAttribute('tabindex', '0');
-    li.innerHTML = `
-      <div class="item-main">
-        <strong>${escapeHtml(expense.itemName)}</strong>
-        <span class="item-sub">${expense.date} / ${expense.category} / ${expense.paymentMethod}</span>
-      </div>
-      <div class="item-actions">
-        <span class="item-amount">${formatAmount(expense.amount)}</span>
-        <div class="expense-item-buttons">
-          <button class="btn btn-light expense-reregister" data-expense-id="${expense.id}">再登録</button>
-          <button class="btn btn-danger expense-delete" data-expense-id="${expense.id}">削除</button>
-        </div>
-      </div>
-    `;
+
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const strong = document.createElement('strong');
+    strong.textContent = expense.itemName;
+    const sub = document.createElement('span');
+    sub.className = 'item-sub';
+    sub.textContent = `${expense.date} / ${expense.category} / ${expense.paymentMethod}`;
+    main.append(strong, sub);
+
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+    const amount = document.createElement('span');
+    amount.className = 'item-amount';
+    amount.textContent = formatAmount(expense.amount);
+    const buttonGroup = document.createElement('div');
+    buttonGroup.className = 'expense-item-buttons';
+    const reregisterButton = document.createElement('button');
+    reregisterButton.className = 'btn btn-light expense-reregister';
+    reregisterButton.dataset.expenseId = expense.id;
+    reregisterButton.textContent = '再登録';
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'btn btn-danger expense-delete';
+    deleteButton.dataset.expenseId = expense.id;
+    deleteButton.textContent = '削除';
+    buttonGroup.append(reregisterButton, deleteButton);
+    actions.append(amount, buttonGroup);
+    li.append(main, actions);
+
     li.addEventListener('click', async () => {
       const targetExpense = (await loadLocalData(STORAGE_KEYS.expenses)).find((entry) => entry.id === expense.id);
       if (!targetExpense) return;
@@ -670,7 +782,7 @@ async function renderExpenseOptions() {
   const selectedCategory = categorySelect.value;
   const selectedPayment = paymentSelect.value;
 
-  categorySelect.innerHTML = '';
+  categorySelect.replaceChildren();
   sortOptionsByUsage(categories, categoryUsage).forEach((name) => {
     const option = document.createElement('option');
     option.value = name;
@@ -678,7 +790,7 @@ async function renderExpenseOptions() {
     categorySelect.appendChild(option);
   });
 
-  paymentSelect.innerHTML = '';
+  paymentSelect.replaceChildren();
   sortOptionsByUsage(paymentMethods, paymentUsage).forEach((name) => {
     const option = document.createElement('option');
     option.value = name;
@@ -721,7 +833,7 @@ async function renderFixedCosts() {
   const configured = await isMonthFixedCostConfigured(selectedMonth);
   document.getElementById('fixed-screen-title').textContent = `固定費入力（${monthLabel(selectedMonth)}）`;
   document.getElementById('fixed-screen-status').textContent = makeFixedStatusText(selectedMonth, configured);
-  list.innerHTML = '';
+  list.replaceChildren();
 
   monthlyFixedCosts.forEach((item) => {
     const li = document.createElement('li');
@@ -729,7 +841,9 @@ async function renderFixedCosts() {
 
     const main = document.createElement('div');
     main.className = 'item-main';
-    main.innerHTML = `<strong>${escapeHtml(item.itemName)}</strong>`;
+    const strong = document.createElement('strong');
+    strong.textContent = item.itemName;
+    main.append(strong);
 
     const right = document.createElement('div');
     right.className = 'item-main';
@@ -794,17 +908,6 @@ function openFixedModal(item = null) {
 function closeFixedModal() {
   fixedModal.classList.add('hidden');
   setFixedModalMode(null);
-}
-
-function escapeHtml(text) {
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return String(text).replace(/[&<>"']/g, (match) => map[match]);
 }
 
 async function initializeRoute() {
