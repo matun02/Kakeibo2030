@@ -5,7 +5,7 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
-const APP_VERSION = '0.2';
+const APP_VERSION = '0.3';
 const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
@@ -808,7 +808,10 @@ function escapeHtml(text) {
 }
 
 async function initializeRoute() {
-  await showScreen('dashboard');
+  resetExpenseEditor();
+  expenseForm.reset();
+  setExpenseDefaultDate();
+  await showScreen('expense');
 }
 
 async function normalizeFixedCostsSchema() {
