@@ -70,15 +70,25 @@ export default class GoogleDriveService {
 
   async requestAccessToken({ interactive }) {
     const tokenResponse = await new Promise((resolve, reject) => {
+      this.tokenClient.error_callback = (error) => {
+        reject(new Error(error?.type || 'token_request_failed'));
+      };
+
       this.tokenClient.callback = (response) => {
         if (response?.error) {
           reject(new Error(response.error));
           return;
         }
+        if (!response?.access_token) {
+          reject(new Error('missing_access_token'));
+          return;
+        }
         resolve(response);
       };
 
-      this.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      this.tokenClient.requestAccessToken({
+        prompt: interactive ? 'consent' : 'none',
+      });
     });
 
     this.#setToken(tokenResponse.access_token, Number(tokenResponse.expires_in || 0));
