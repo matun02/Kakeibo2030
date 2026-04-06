@@ -96,7 +96,10 @@ export default class GoogleDriveService {
   }
 
   async loadData() {
-    this.#assertSignedIn();
+    const authorized = await this.ensureAuthorized();
+    if (!authorized) {
+      throw new Error('Not signed in to Google.');
+    }
     this.#updateStatus('syncing');
 
     const file = await this.#findDataFile();
@@ -115,7 +118,10 @@ export default class GoogleDriveService {
   }
 
   async saveData(data) {
-    this.#assertSignedIn();
+    const authorized = await this.ensureAuthorized();
+    if (!authorized) {
+      throw new Error('Not signed in to Google.');
+    }
     this.#updateStatus('syncing');
 
     const file = await this.#findDataFile();
@@ -203,12 +209,6 @@ export default class GoogleDriveService {
     localStorage.removeItem(this.tokenStorageKey);
     if (window.gapi?.client?.setToken) {
       window.gapi.client.setToken(null);
-    }
-  }
-
-  #assertSignedIn() {
-    if (!this.isSignedIn()) {
-      throw new Error('Not signed in to Google.');
     }
   }
 
