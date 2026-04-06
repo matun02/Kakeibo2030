@@ -198,7 +198,8 @@ function sanitizeReviewPrompt(value) {
 
 
 async function syncSnapshotToDrive() {
-  if (!driveService.isSignedIn()) return;
+  const authorized = await driveService.ensureAuthorized();
+  if (!authorized) return;
 
   try {
     const snapshot = await getLocalSnapshot();
