@@ -87,7 +87,10 @@ export default class GoogleDriveService {
       };
 
       this.tokenClient.requestAccessToken({
-        prompt: interactive ? 'consent select_account' : 'none',
+        // Keep the prompt empty for interactive login so Google can reuse the
+        // previously authorized account/session without forcing consent again.
+        // `none` is still used for silent re-auth attempts.
+        prompt: interactive ? '' : 'none',
       });
     });
 
