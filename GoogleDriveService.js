@@ -35,9 +35,13 @@ export default class GoogleDriveService {
   }
 
   async ensureAuthorized() {
+    return this.ensureAuthorizedWithOptions();
+  }
+
+  async ensureAuthorizedWithOptions({ forceRefresh = false } = {}) {
     await this.initializeDrive();
 
-    if (this.isSignedIn()) {
+    if (this.isSignedIn() && !forceRefresh) {
       this.#updateStatus('connected');
       return true;
     }
@@ -55,7 +59,11 @@ export default class GoogleDriveService {
   async signIn() {
     await this.initializeDrive();
     this.#updateStatus('connecting');
-    await this.requestAccessToken({ interactive: true });
+    try {
+      await this.requestAccessToken({ interactive: false });
+    } catch {
+      await this.requestAccessToken({ interactive: true });
+    }
     this.#updateStatus('connected');
   }
 
@@ -99,38 +107,57 @@ export default class GoogleDriveService {
   }
 
   async loadData() {
-    const authorized = await this.ensureAuthorized();
-    if (!authorized) {
-      throw new Error('Not signed in to Google.');
-    }
-    this.#updateStatus('syncing');
+    return this.#executeWithAuthRetry(async () => {
+      const file = await this.#findDataFile();
+      if (!file) return null;
 
-    const file = await this.#findDataFile();
-    if (!file) {
-      this.#updateStatus('synced');
-      return null;
-    }
+      const response = await window.gapi.client.drive.files.get({
+        fileId: file.id,
+        alt: 'media',
+      });
 
-    const response = await window.gapi.client.drive.files.get({
-      fileId: file.id,
-      alt: 'media',
+      return response.result;
     });
-
-    this.#updateStatus('synced');
-    return response.result;
   }
 
   async saveData(data) {
+    await this.#executeWithAuthRetry(async () => {
+      const file = await this.#findDataFile();
+      await this.#uploadData(data, file?.id);
+    });
+  }
+
+  async #executeWithAuthRetry(operation) {
     const authorized = await this.ensureAuthorized();
     if (!authorized) {
       throw new Error('Not signed in to Google.');
     }
     this.#updateStatus('syncing');
 
-    const file = await this.#findDataFile();
-    await this.#uploadData(data, file?.id);
+    try {
+      const result = await operation();
+      this.#updateStatus('synced');
+      return result;
+    } catch (error) {
+      if (this.#isTokenInvalidError(error)) {
+        try {
+          await this.requestAccessToken({ interactive: false });
+          const retryResult = await operation();
+          this.#updateStatus('synced');
+          return retryResult;
+        } catch (retryError) {
+          if (this.#isTokenInvalidError(retryError)) {
+            this.signOut();
+            throw new Error('token_invalid_reauth_required');
+          }
+          this.#updateStatus('error');
+          throw retryError;
+        }
+      }
 
-    this.#updateStatus('synced');
+      this.#updateStatus('error');
+      throw error;
+    }
   }
 
   async #waitForGoogleScripts(timeoutMs = 12000) {
@@ -260,6 +287,22 @@ export default class GoogleDriveService {
     if (!response.ok) {
       throw new Error(`Drive upload failed: ${response.status}`);
     }
+  }
+
+  #isTokenInvalidError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (
+      message.includes('invalid_grant') ||
+      message.includes('invalid_token') ||
+      message.includes('unauthorized') ||
+      message.includes('token has been expired') ||
+      message.includes('token_invalid')
+    ) {
+      return true;
+    }
+
+    const status = Number(error?.status ?? error?.result?.error?.code);
+    return status === 401;
   }
 
   #updateStatus(status) {

@@ -211,14 +211,24 @@ async function syncSnapshotToDrive() {
 }
 
 async function tryAutoLoginAndLoadDriveData() {
-  const authorized = await driveService.ensureAuthorized();
+  const shouldForceRefresh = driveService.isSignedIn();
+  const authorized = await driveService.ensureAuthorizedWithOptions({ forceRefresh: shouldForceRefresh });
   updateAuthButtons();
 
   if (!authorized) return;
 
-  const cloudSnapshot = await driveService.loadData();
-  if (cloudSnapshot && typeof cloudSnapshot === 'object') {
-    await applySnapshotToLocal(cloudSnapshot);
+  try {
+    const cloudSnapshot = await driveService.loadData();
+    if (cloudSnapshot && typeof cloudSnapshot === 'object') {
+      await applySnapshotToLocal(cloudSnapshot);
+    }
+  } catch (error) {
+    if (error?.message === 'token_invalid_reauth_required') {
+      alert('Google認証の有効期限が切れたため、再ログインが必要です。');
+      updateAuthButtons();
+      return;
+    }
+    throw error;
   }
 }
 
@@ -1036,6 +1046,11 @@ async function handleGoogleSignIn() {
     await runPostSyncFixedCostFlow();
   } catch (error) {
     updateSyncStatus('error');
+    if (error?.message === 'token_invalid_reauth_required') {
+      updateAuthButtons();
+      alert('Google認証の有効期限が切れたため、再ログインしてください。');
+      return;
+    }
     alert(`Google Drive同期に失敗しました: ${error.message || error}`);
     console.error(error);
   }
