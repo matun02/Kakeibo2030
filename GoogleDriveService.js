@@ -24,7 +24,6 @@ export default class GoogleDriveService {
       await this.#waitForGoogleScripts();
       await Promise.all([this.#initializeGapi(), this.#initializeGis()]);
       this.#restoreTokenFromStorage();
-      this.#updateStatus(this.isSignedIn() ? 'connected' : 'offline');
     })();
 
     return this.initializePromise;
@@ -41,7 +40,7 @@ export default class GoogleDriveService {
   async ensureAuthorizedWithOptions({ forceRefresh = false } = {}) {
     await this.initializeDrive();
 
-    if (this.isSignedIn() && !forceRefresh) {
+    if (this.isSignedIn()) {
       this.#updateStatus('connected');
       return true;
     }
@@ -55,6 +54,10 @@ export default class GoogleDriveService {
           this.#updateStatus('connected');
           return true;
         } catch {
+          if (tokenState === 'valid') {
+            this.#updateStatus('connected');
+            return true;
+          }
           // Fall through to interactive account selection login.
         }
       }

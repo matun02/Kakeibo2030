@@ -211,8 +211,7 @@ async function syncSnapshotToDrive() {
 }
 
 async function tryAutoLoginAndLoadDriveData() {
-  const shouldForceRefresh = driveService.isSignedIn();
-  const authorized = await driveService.ensureAuthorizedWithOptions({ forceRefresh: shouldForceRefresh });
+  const authorized = await driveService.ensureAuthorized();
   updateAuthButtons();
 
   if (!authorized) return;
