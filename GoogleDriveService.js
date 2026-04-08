@@ -46,8 +46,19 @@ export default class GoogleDriveService {
       return true;
     }
 
+    const tokenState = this.#getStoredTokenState();
+
     try {
-      await this.requestAccessToken({ interactive: false });
+      if (tokenState === 'expired' || tokenState === 'valid') {
+        try {
+          await this.requestAccessToken({ interactive: false });
+          this.#updateStatus('connected');
+          return true;
+        } catch {
+          // Fall through to interactive account selection login.
+        }
+      }
+      await this.requestAccessToken({ interactive: true });
       this.#updateStatus('connected');
       return true;
     } catch {
@@ -59,10 +70,15 @@ export default class GoogleDriveService {
   async signIn() {
     await this.initializeDrive();
     this.#updateStatus('connecting');
-    try {
-      await this.requestAccessToken({ interactive: false });
-    } catch {
+    const tokenState = this.#getStoredTokenState();
+    if (tokenState === 'none') {
       await this.requestAccessToken({ interactive: true });
+    } else {
+      try {
+        await this.requestAccessToken({ interactive: false });
+      } catch {
+        await this.requestAccessToken({ interactive: true });
+      }
     }
     this.#updateStatus('connected');
   }
@@ -95,10 +111,9 @@ export default class GoogleDriveService {
       };
 
       this.tokenClient.requestAccessToken({
-        // Keep the prompt empty for interactive login so Google can reuse the
-        // previously authorized account/session without forcing consent again.
-        // `none` is still used for silent re-auth attempts.
-        prompt: interactive ? '' : 'none',
+        // `none` is used for silent re-auth attempts.
+        // Interactive login explicitly asks users to select an account.
+        prompt: interactive ? 'select_account' : 'none',
       });
     });
 
@@ -307,5 +322,19 @@ export default class GoogleDriveService {
 
   #updateStatus(status) {
     this.onStatusChange(status);
+  }
+
+  #getStoredTokenState() {
+    try {
+      const raw = localStorage.getItem(this.tokenStorageKey);
+      if (!raw) return 'none';
+
+      const parsed = JSON.parse(raw);
+      if (!parsed?.access_token || !parsed?.expires_at) return 'none';
+
+      return Date.now() < Number(parsed.expires_at) ? 'valid' : 'expired';
+    } catch {
+      return 'none';
+    }
   }
 }
