@@ -5,7 +5,7 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
-const APP_VERSION = '0.5';
+const APP_VERSION = '0.6';
 const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
@@ -455,7 +455,7 @@ async function renderDashboard() {
   expenseList.replaceChildren();
   const sorted = [...monthlyExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  sorted.slice(0, 12).forEach((expense) => {
+  sorted.forEach((expense) => {
     const li = document.createElement('li');
     li.className = 'list-item';
     li.setAttribute('role', 'button');
