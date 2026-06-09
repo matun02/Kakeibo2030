@@ -5,7 +5,7 @@ const GOOGLE_CONFIG = {
   SCOPE: 'https://www.googleapis.com/auth/drive.file',
 };
 
-const APP_VERSION = '0.6';
+const APP_VERSION = '0.7';
 const APP_VERSION_STORAGE_KEY = 'kakeibo_app_version';
 
 const STORAGE_KEYS = {
@@ -585,10 +585,15 @@ function getPastCumulativeAverages(allExpenses) {
   return totals.map((total, index) => (counts[index] > 0 ? total / counts[index] : 0));
 }
 
+function getChartTextColor() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#ffffff' : '#000000';
+}
+
 function drawLineChart(canvas, expenses, pastAverages) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
+  const chartTextColor = getChartTextColor();
   ctx.clearRect(0, 0, width, height);
   if (expenses.length === 0 && pastAverages.every((value) => value === 0)) return;
 
@@ -649,7 +654,7 @@ function drawLineChart(canvas, expenses, pastAverages) {
   });
   ctx.stroke();
 
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = chartTextColor;
   ctx.font = '14px sans-serif';
   yTickValues.forEach((value) => {
     const tickLabel = `${Math.round(value / 10000)}万`;
@@ -660,11 +665,11 @@ function drawLineChart(canvas, expenses, pastAverages) {
 
   ctx.fillStyle = '#4f46e5';
   ctx.fillRect(width - 238, 14, 14, 3);
-  ctx.fillStyle = '#1f2a44';
+  ctx.fillStyle = chartTextColor;
   ctx.fillText('当月累計支出', width - 216, 21);
   ctx.fillStyle = '#a5b4fc';
   ctx.fillRect(width - 238, 38, 14, 3);
-  ctx.fillStyle = '#1f2a44';
+  ctx.fillStyle = chartTextColor;
   ctx.fillText('過去同日累計平均', width - 216, 44);
 }
 
@@ -672,6 +677,7 @@ function drawPieChart(canvas, expenses, groupBy) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
+  const chartTextColor = getChartTextColor();
   ctx.clearRect(0, 0, width, height);
   if (expenses.length === 0) return;
 
@@ -708,7 +714,7 @@ function drawPieChart(canvas, expenses, groupBy) {
     const ratioText = `${Math.round((value / total) * 100)}%`;
     ctx.fillStyle = color;
     ctx.fillRect(260, y - 13, 14, 14);
-    ctx.fillStyle = '#1f2a44';
+    ctx.fillStyle = chartTextColor;
     ctx.fillText(`${name}: ${ratioText} (${formatAmount(value)})`, 282, y);
   });
 }
@@ -734,6 +740,15 @@ async function renderAnalysis() {
   lineEmpty.classList.toggle('hidden', expenses.length > 0 || pastAverages.some((value) => value > 0));
   categoryPieEmpty.classList.toggle('hidden', expenses.length > 0);
   pieEmpty.classList.toggle('hidden', expenses.length > 0);
+}
+
+function initializeChartColorSchemeListener() {
+  const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const redrawVisibleAnalysisCharts = () => {
+    if (!screens.analysis.classList.contains('hidden')) void renderAnalysis();
+  };
+
+  colorSchemeQuery.addEventListener('change', redrawVisibleAnalysisCharts);
 }
 
 function setActiveTab(tab) {
@@ -1206,6 +1221,7 @@ fixedForm.addEventListener('submit', async (event) => {
   setSyncButtonLoading(true, 'Loading Google...');
   updateAuthButtons();
   updateSyncStatus('offline');
+  initializeChartColorSchemeListener();
 
   try {
     await driveService.initializeDrive();
